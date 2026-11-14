@@ -116,4 +116,24 @@ REFUSAL_USER = """<material>
 # (Phase 2 adds quiz prompts here; it can reuse QUESTIONS_SYSTEM / QUESTIONS_USER)
 
 # ---------------------------------------------------------------- Phase 3: insights
-# (Phase 3 adds the misconception-summary prompt here)
+
+MISCONCEPTIONS_SYSTEM = """You help a university lecturer understand where students get stuck.
+You get ONE topic of a class, the quiz questions students got wrong on it (with the wrong option they picked
+and how often), and the questions students asked the AI tutor about it.
+Write a short report for the lecturer in markdown:
+1. **Likely misconceptions**: 2-4 bullets. Each names the specific wrong belief, backed by the evidence
+   (which wrong option was popular, or what students kept asking).
+2. **Suggested fix for next class**: 1-3 concrete bullets (an example, a contrast, a quick in-class check).
+Be specific and concise (max ~150 words). Use only the evidence given; if it is thin, say so.
+Never mention or guess student names."""
+
+MISCONCEPTIONS_USER = """<lecture>{lecture}</lecture>
+<topic>{topic}: {topic_summary}</topic>
+
+<wrong_answers>
+{wrong_answers}
+</wrong_answers>
+
+<questions>
+{questions}
+</questions>"""

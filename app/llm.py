@@ -213,4 +213,20 @@ def _mock(kind: str, system: str, user: str) -> str:
                 f"answer. It's about {idea}: think about how the lecture introduces it and what it contrasts it with.\n\n"
                 f"Re-read that part of the lecture, then ask yourself: which option matches how the lecture *defines* it?")
 
+    if kind == "misconceptions":  # Phase 3: lecturer misconception summary
+        topic = _tag(user, "topic").split(":")[0] or "this topic"
+        wrong = [l.split(": ", 1)[-1] for l in _tag(user, "wrong_answers").splitlines() if "Wrongly chosen" in l]
+        qs = [l.lstrip("- ") for l in _tag(user, "questions").splitlines() if l.strip().startswith("-")]
+        out = [f"*(mock summary)* **Likely misconceptions about {topic}**\n"]
+        if wrong:
+            out.append(f"- Many students picked: *\"{wrong[0][:120]}\"*, so they confuse {topic.lower()} "
+                       "with a neighbouring idea.")
+        if qs:
+            out.append(f"- {len(qs)} tutor questions on this topic, e.g. *\"{qs[0][:120]}\"*")
+        if not wrong and not qs:
+            out.append("- Not enough evidence yet.")
+        out.append(f"\n**Suggested fix for next class**\n\n- Open with a worked example of {topic.lower()} "
+                   "and a 1-question check.")
+        return "\n".join(out)
+
     return f"(mock {kind} response)"
