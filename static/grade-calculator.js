@@ -5,6 +5,7 @@
   const dialog = document.getElementById('grade-calculator');
   const form = document.getElementById('grade-plan');
   const courses = document.getElementById('grade-courses');
+  const courseFeedback = document.getElementById('grade-course-feedback');
   const template = document.getElementById('grade-course-template');
   const addCourseButton = document.getElementById('add-grade-course');
   const examCfuInput = document.getElementById('upcoming-cfu');
@@ -39,7 +40,14 @@
   });
 
   function hasValue(input) {
-    return input.value !== '' || input.validity.badInput;
+    return input.value.trim() !== '' || input.validity.badInput;
+  }
+
+  function decimalHundredths(input) {
+    const text = input.value.trim();
+    if (!/^(?:\d+|\d*[.,]\d{1,2})$/.test(text)) return null;
+    const value = Math.round(Number(text.replace(',', '.')) * 100);
+    return Number.isSafeInteger(value) ? value : null;
   }
 
   function showResult(id, value, detail) {
@@ -51,43 +59,47 @@
     // Use hundredths of a CFU and of a grade to compare unrounded averages.
     let completedCfu = 0;
     let weightedPoints = 0;
-    let incomplete = false;
+    let excluded = 0;
     for (const row of courses.children) {
       const grade = row.querySelector('[name="grade"]');
       const cfu = row.querySelector('[name="cfu"]');
-      if (!hasValue(grade) && !hasValue(cfu) && !row.querySelector('[name="course"]').value.trim()) continue;
-      if (!grade.value || !grade.validity.valid || !cfu.value || !cfu.validity.valid) {
-        incomplete = true;
-        break;
+      const cfuUnits = decimalHundredths(cfu);
+      const validGrade = Boolean(grade.value && grade.validity.valid);
+      grade.setAttribute('aria-invalid', hasValue(grade) && !validGrade);
+      cfu.setAttribute('aria-invalid', hasValue(cfu) && !cfuUnits);
+      if (validGrade && cfuUnits) {
+        completedCfu += cfuUnits;
+        weightedPoints += grade.valueAsNumber * cfuUnits;
+      } else if (hasValue(grade) || hasValue(cfu) || row.querySelector('[name="course"]').value.trim()) {
+        excluded += 1;
       }
-      const cfuUnits = Math.round(cfu.valueAsNumber * 100);
-      completedCfu += cfuUnits;
-      weightedPoints += grade.valueAsNumber * cfuUnits;
     }
 
-    if (incomplete) {
-      showResult('current-grade-average', '—', 'Give each course a grade from 18 to 30 and positive CFU.');
-      showResult('needed-grade', '—', '');
-      showResult('projected-grade-average', '—', '');
-      return;
-    }
+    courseFeedback.hidden = excluded === 0;
+    courseFeedback.textContent = excluded
+      ? `${excluded} ${excluded === 1 ? 'course is' : 'courses are'} excluded until each has positive CFU and a whole grade from 18 to 30.`
+      : '';
     showResult('current-grade-average',
       completedCfu ? averageFormat.format(weightedPoints / completedCfu) + '/30' : '—',
       completedCfu ? cfuFormat.format(completedCfu / 100) + ' completed CFU' : 'No completed CFU entered.');
 
-    if (!examCfuInput.value || !examCfuInput.validity.valid) {
-      showResult('needed-grade', '—', 'Enter positive CFU for the upcoming exam.');
+    const examCfu = decimalHundredths(examCfuInput);
+    examCfuInput.setAttribute('aria-invalid', hasValue(examCfuInput) && !examCfu);
+    const target = decimalHundredths(targetInput);
+    const targetKnown = target !== null && target >= minGrade * 100 && target <= maxGrade * 100;
+    targetInput.setAttribute('aria-invalid', hasValue(targetInput) && !targetKnown);
+    const examGradeKnown = Boolean(examGradeInput.value && examGradeInput.validity.valid);
+    examGradeInput.setAttribute('aria-invalid', hasValue(examGradeInput) && !examGradeKnown);
+    if (!examCfu) {
+      showResult('needed-grade', '—', 'Enter positive exam CFU, with up to two decimal places.');
       showResult('projected-grade-average', '—', '');
       return;
     }
 
-    const examCfu = Math.round(examCfuInput.valueAsNumber * 100);
     const totalCfu = completedCfu + examCfu;
-    const targetKnown = Boolean(targetInput.value && targetInput.validity.valid);
-    const target = Math.round(targetInput.valueAsNumber * 100);
-    const targetPoints = target * totalCfu;
+    const targetPoints = targetKnown ? target * totalCfu : null;
     if (!targetKnown) {
-      showResult('needed-grade', '—', 'Enter a target average from 18 to 30.');
+      showResult('needed-grade', '—', 'Enter a target average from 18 to 30, with up to two decimal places.');
     } else {
       const needed = Math.max(minGrade, Math.ceil((targetPoints - 100 * weightedPoints) / (100 * examCfu)));
       if (needed > maxGrade) {
@@ -98,7 +110,7 @@
       }
     }
 
-    if (!examGradeInput.value || !examGradeInput.validity.valid) {
+    if (!examGradeKnown) {
       showResult('projected-grade-average', '—', hasValue(examGradeInput)
         ? 'Enter a whole grade from 18 to 30.'
         : 'Enter an expected grade to see your new average.');
