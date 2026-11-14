@@ -2,8 +2,9 @@
 
   GET    /api/users?role=            -> [{id, name, role, course_ids}]
   GET    /api/users/{uid}            -> {id, name, role, course_ids}
-  POST   /api/users                  {name | names:[...], role, course_ids?} -> user | [users]
-  PATCH  /api/users/{uid}            {name?, course_ids?}
+  POST   /api/users                  {name | names:[...], role, course_ids?, new_courses?} -> user | [users]
+  PATCH  /api/users/{uid}            {name?, course_ids?, new_courses?}
+  (new_courses: names of courses to create and give to a teacher)
   DELETE /api/users/{uid}            (history rows stay, so insights don't change)
   POST   /api/users/join             {name, course_id?} -> get-or-create a student (QR joiners)
 
@@ -55,6 +56,15 @@ def _set_courses(conn, uid: int, role: str, name: str, course_ids: list[int]) ->
         conn.executemany("UPDATE courses SET teacher_id=?, lecturer_name=? WHERE id=?", [(uid, name, c) for c in ids])
 
 
+def _add_new_courses(conn, uid: int, role: str, name: str, new_courses: list[str] | None) -> None:
+    """Create courses owned by this teacher (ignored for students)."""
+    if role != "teacher":
+        return
+    for title in dict.fromkeys((c or "").strip()[:120] for c in new_courses or []):
+        if title:
+            conn.execute("INSERT INTO courses (name, lecturer_name, teacher_id) VALUES (?,?,?)", (title, name, uid))
+
+
 @router.get("/users")
 def list_users(role: str | None = None):
     sql, params = "SELECT id, name, role FROM users", ()
@@ -81,6 +91,7 @@ class UserIn(BaseModel):
     names: list[str] | None = None   # bulk add: one user per name (duplicates are skipped)
     role: str = "student"
     course_ids: list[int] = []
+    new_courses: list[str] = []      # teachers only: courses to create for them
 
 
 @router.post("/users")
@@ -96,6 +107,7 @@ def create_user(body: UserIn):
                     continue
                 uid = conn.execute("INSERT INTO users (name, role) VALUES (?,?)", (name, body.role)).lastrowid
                 _set_courses(conn, uid, body.role, name, body.course_ids)
+                _add_new_courses(conn, uid, body.role, name, body.new_courses)
                 created.append(uid)
         return [_user(uid) for uid in created]
     name = _clean_name(body.name)
@@ -104,12 +116,14 @@ def create_user(body: UserIn):
     with connect() as conn:
         uid = conn.execute("INSERT INTO users (name, role) VALUES (?,?)", (name, body.role)).lastrowid
         _set_courses(conn, uid, body.role, name, body.course_ids)
+        _add_new_courses(conn, uid, body.role, name, body.new_courses)
     return _user(uid)
 
 
 class UserPatch(BaseModel):
     name: str | None = None
     course_ids: list[int] | None = None
+    new_courses: list[str] | None = None
 
 
 @router.patch("/users/{uid}")
@@ -129,6 +143,7 @@ def patch_user(uid: int, body: UserPatch):
                 conn.execute("UPDATE courses SET lecturer_name=? WHERE teacher_id=?", (name, uid))
         if body.course_ids is not None:
             _set_courses(conn, uid, u["role"], name, body.course_ids)
+        _add_new_courses(conn, uid, u["role"], name, body.new_courses)
     return _user(uid)
 
 

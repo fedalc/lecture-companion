@@ -10,7 +10,7 @@
 <body class="flex flex-col">
   <main class="max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
     <h1 class="text-2xl font-semibold tracking-tight">People</h1>
-    <p class="text-stone-500">Set up the students and teachers for the demo, then act as any of them.</p>
+    <p class="text-stone-500">Set up the students and teachers for the demo. Switch between them with the user chip at the top right.</p>
 
     <form id="add-form" class="mt-6 rounded-2xl bg-white border border-stone-200 p-4 sm:p-5 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-start">
       <div>
@@ -24,6 +24,10 @@
       <div class="text-sm">
         <div class="font-medium" id="courses-label">Enroll in courses</div>
         <div id="add-courses" class="mt-2 flex flex-wrap gap-2"></div>
+        <label id="new-courses-box" class="hidden mt-3 block">
+          <span class="font-medium">New courses</span> <span class="text-stone-400">(one per line, created for this teacher)</span>
+          <textarea name="new_courses" rows="2" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g.&#10;Analysis II"></textarea>
+        </label>
       </div>
       <div class="flex flex-col gap-2">
         <button class="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-medium hover:bg-indigo-700">Add</button>
@@ -69,14 +73,17 @@
         b.classList.toggle('bg-white', on); b.classList.toggle('shadow-sm', on);
         b.classList.toggle('text-stone-900', on); b.classList.toggle('text-stone-500', !on);
       });
-      $('#courses-label').textContent = role === 'teacher' ? 'Courses this teacher runs' : 'Enroll in courses';
+      $('#courses-label').textContent = role === 'teacher' ? 'Existing courses this teacher runs' : 'Enroll in courses';
+      $('#new-courses-box').classList.toggle('hidden', role !== 'teacher');
+      // a teacher takes over the courses ticked here, so start with none ticked; students default to the only course
+      document.querySelectorAll('input[name=add-course]').forEach(i => i.checked = role === 'student' && state.courses.length === 1);
+      $('#add-form').names.placeholder = role === 'teacher' ? 'Teacher name, e.g. Prof. Rossi' : 'One name per line, e.g.\nGiulia Rossi\nMarco Bianchi';
     }
     document.querySelectorAll('#role-toggle button').forEach(b => b.onclick = () => setRole(b.dataset.role));
 
     function userRow(u) {
       const me = getCurrentUser();
       const isMe = me && me.id === u.id;
-      const home = u.role === 'teacher' ? '/lecturer' : '/';
       const chips = u.course_ids.length
         ? u.course_ids.map(id => `<span class="text-xs rounded-full bg-stone-100 text-stone-600 px-2 py-0.5">${escapeHtml(courseName(id))}</span>`).join(' ')
         : `<span class="text-xs text-stone-400">${u.role === 'teacher' ? 'no courses' : 'not enrolled'}</span>`;
@@ -84,6 +91,8 @@
         return `<form data-edit="${u.id}" class="rounded-xl bg-white border border-indigo-300 p-3 grid gap-3">
           <input name="name" required maxlength="60" value="${escapeHtml(u.name)}" class="rounded-lg border border-stone-300 px-3 py-1.5 text-sm">
           <div class="flex flex-wrap gap-2">${courseChecks(u.course_ids, 'course')}</div>
+          ${u.role === 'teacher' ? `<label class="text-sm"><span class="text-stone-500">Add new courses (one per line)</span>
+            <textarea name="new_courses" rows="2" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Analysis II"></textarea></label>` : ''}
           <div class="flex flex-wrap gap-2 text-sm">
             <button class="rounded-lg bg-indigo-600 text-white px-3 py-1.5 font-medium hover:bg-indigo-700">Save</button>
             <button type="button" data-cancel class="rounded-lg px-3 py-1.5 text-stone-500 hover:text-stone-900">Cancel</button>
@@ -97,8 +106,6 @@
           <div class="mt-0.5 flex flex-wrap gap-1">${chips}</div>
         </div>
         <div class="flex items-center gap-1 shrink-0 text-sm">
-          <button data-act="${u.id}" class="rounded-lg bg-indigo-600 text-white px-3 py-1.5 font-medium hover:bg-indigo-700 ${isMe ? 'opacity-40 pointer-events-none' : ''}">Act as</button>
-          <a href="${home}?as=${u.id}" target="_blank" title="Open a new tab as ${escapeHtml(u.name)}" class="hidden sm:inline rounded-lg px-2 py-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900">Open as ↗</a>
           <button data-editbtn="${u.id}" title="Edit" class="rounded-lg px-2 py-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900">Edit</button>
         </div></div>`;
     }
@@ -122,7 +129,7 @@
 
     async function load() {
       [state.users, state.courses] = await Promise.all([api('/api/users'), api('/api/courses')]);
-      $('#add-courses').innerHTML = courseChecks(state.courses.length === 1 ? [state.courses[0].id] : [], 'add-course');
+      $('#add-courses').innerHTML = courseChecks(state.role === 'student' && state.courses.length === 1 ? [state.courses[0].id] : [], 'add-course');
       draw();
     }
 
@@ -133,23 +140,21 @@
       const course_ids = [...f.querySelectorAll('input[name=add-course]:checked')].map(i => +i.value);
       const msg = $('#add-msg');
       try {
-        const created = await api('/api/users', { method: 'POST', body: { names, role: state.role, course_ids } });
+        const new_courses = state.role === 'teacher' ? f.new_courses.value.split('\n').map(s => s.trim()).filter(Boolean) : [];
+        if (new_courses.length && names.length > 1) throw new Error('Add one teacher at a time when creating new courses.');
+        const created = await api('/api/users', { method: 'POST', body: { names, role: state.role, course_ids, new_courses } });
         const skipped = names.length - created.length;
         msg.className = 'text-xs text-emerald-700 max-w-[12rem]';
         msg.textContent = `Added ${created.length}` + (skipped ? `, skipped ${skipped} existing name${skipped > 1 ? 's' : ''}` : '') + '.';
-        f.names.value = '';
+        f.names.value = ''; f.new_courses.value = '';
         await load();
       } catch (err) { msg.className = 'text-xs text-rose-600 max-w-[12rem]'; msg.textContent = err.message; }
     };
 
     document.addEventListener('click', async e => {
-      const t = e.target.closest('[data-act],[data-editbtn],[data-cancel],[data-delete]');
+      const t = e.target.closest('[data-editbtn],[data-cancel],[data-delete]');
       if (!t) return;
-      if (t.dataset.act) {
-        const u = state.users.find(x => String(x.id) === t.dataset.act);
-        setCurrentUser(u);
-        location.href = u.role === 'teacher' ? '/lecturer' : '/';
-      } else if (t.dataset.editbtn) { state.editing = +t.dataset.editbtn; draw(); }
+      if (t.dataset.editbtn) { state.editing = +t.dataset.editbtn; draw(); }
       else if (t.hasAttribute('data-cancel')) { state.editing = null; draw(); }
       else if (t.dataset.delete) {
         const u = state.users.find(x => String(x.id) === t.dataset.delete);
@@ -167,7 +172,8 @@
       const uid = +f.dataset.edit;
       const course_ids = [...f.querySelectorAll('input[name=course]:checked')].map(i => +i.value);
       try {
-        const u = await api(`/api/users/${uid}`, { method: 'PATCH', body: { name: f.name.value, course_ids } });
+        const u = await api(`/api/users/${uid}`, { method: 'PATCH', body: { name: f.name.value, course_ids,
+          new_courses: f.new_courses ? f.new_courses.value.split('\n').map(s => s.trim()).filter(Boolean) : [] } });
         const me = getCurrentUser();
         if (me && me.id === uid) setCurrentUser(u);
         state.editing = null; await load(); renderNavAgain();

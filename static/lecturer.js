@@ -325,14 +325,9 @@ if (isTeacher) {
     <div class="max-w-md mx-auto mt-10 rounded-2xl bg-white border border-stone-200 p-6 text-center">
       <div class="text-lg font-semibold">The dashboard is for teachers</div>
       <p class="text-stone-500 mt-1">${me ? `You're acting as the student <b>${escapeHtml(me.name)}</b> right now.` : 'Nobody is selected yet.'} Pick a teacher to continue.</p>
-      <div id="teacher-pick" class="mt-4 grid gap-2"></div>
-      <a href="/people" class="mt-4 inline-block text-sm text-indigo-600 hover:underline">Manage people →</a>
+      <button id="teacher-pick" class="mt-4 rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700">Switch user</button>
     </div>`;
-  api('/api/users?role=teacher').then(ts => {
-    $('#teacher-pick').innerHTML = ts.map(t => `<button data-t="${t.id}" class="rounded-lg border border-stone-200 px-4 py-2 hover:border-indigo-400 hover:bg-indigo-50 text-left">${escapeHtml(t.name)}</button>`).join('')
-      || '<p class="text-sm text-stone-400">No teachers yet. Add one on the People page.</p>';
-    document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { setCurrentUser(ts.find(t => String(t.id) === b.dataset.t)); location.reload(); });
-  });
+  $('#teacher-pick').onclick = showUserPicker;
 }
 window.addEventListener('hashchange', () => {
   const t = location.hash.slice(1);

@@ -23,8 +23,8 @@ async function api(path, opts = {}) {
 
 // ------------------------------------------------------------------ identity (multi-user showcase)
 // No auth: the current user is {id, name, role} kept per tab in sessionStorage (so two tabs can be two
-// different people) with localStorage as the default for new tabs. `?as=<user id>` on any URL sets the
-// tab's user (used by "Open as" on /people). The user's name is what goes into `student_name`.
+// different people) with localStorage as the default for new tabs. The nav switcher is the only way to change it.
+// The user's name is what goes into `student_name`.
 const USER_KEY = 'current_user';
 
 function _readUser(store) {
@@ -37,24 +37,6 @@ function setCurrentUser(u) {
   sessionStorage.setItem(USER_KEY, v);
   localStorage.setItem(USER_KEY, v);
 }
-
-(function applyAsParam() {
-  const params = new URLSearchParams(location.search);
-  const as = params.get('as');
-  if (!as) return;
-  try {  // synchronous on purpose: pages read the user while loading
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', `/api/users/${encodeURIComponent(as)}`, false);
-    xhr.send();
-    if (xhr.status === 200) {
-      const u = JSON.parse(xhr.responseText);
-      sessionStorage.setItem(USER_KEY, JSON.stringify({ id: u.id, name: u.name, role: u.role }));
-    }
-  } catch (_) {}
-  params.delete('as');
-  const qs = params.toString();
-  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
-})();
 
 /** The current user's name (sent as student_name). If nobody is selected (and ask=true) it returns
  *  'Guest' and opens the "Who are you?" picker; picking someone reloads the page. */
@@ -205,10 +187,9 @@ function renderNav(role = 'student', crumbs = []) {
     : `<span class="text-stone-900 font-medium">${escapeHtml(c.label)}</span>`).join('<span class="text-stone-300">/</span>');
   const me = getCurrentUser();
   const tab = (href, label, on) => `<a href="${href}" class="px-2 sm:px-3 py-1 rounded-md ${on ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-900'}">${label}</a>`;
-  const views = [];
-  if (!me || me.role === 'student') views.push(tab('/', 'Courses', role === 'student'));
-  if (me && me.role === 'teacher') views.push(tab('/lecturer', 'Dashboard', role === 'lecturer'), tab('/', 'Student view', role === 'student'));
-  views.push(tab('/people', 'People', role === 'people'));
+  // only teachers get view tabs; students just have the logo (home) and the user chip
+  const views = me && me.role === 'teacher'
+    ? [tab('/lecturer', 'Dashboard', role === 'lecturer'), tab('/', 'Student view', role === 'student')] : [];
   nav.innerHTML = `
     <a href="/" class="flex items-center gap-2 font-semibold tracking-tight text-stone-900 shrink-0">
       <span class="w-7 h-7 rounded-lg bg-indigo-600 text-white grid place-items-center text-sm">L</span>
@@ -216,7 +197,7 @@ function renderNav(role = 'student', crumbs = []) {
     </a>
     <nav class="hidden md:flex items-center gap-2 text-sm text-stone-500 min-w-0 truncate">${crumbHtml}</nav>
     <div class="ml-auto flex items-center gap-2 sm:gap-3 text-sm min-w-0">
-      <div class="flex rounded-lg bg-stone-100 p-0.5 shrink-0">${views.join('')}</div>
+      ${views.length ? `<div class="flex rounded-lg bg-stone-100 p-0.5 shrink-0">${views.join('')}</div>` : ''}
       <button id="who" title="Switch user" class="flex items-center gap-2 rounded-full border border-stone-200 bg-white pl-1 pr-2 sm:pr-3 py-1 hover:border-indigo-300 min-w-0">
         ${me ? `<span class="w-6 h-6 shrink-0 rounded-full ${me.role === 'teacher' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'} grid place-items-center text-[11px] font-semibold">${escapeHtml(initials(me.name))}</span>
           <span class="hidden sm:inline truncate max-w-[9rem] text-stone-900">${escapeHtml(me.name)}</span>

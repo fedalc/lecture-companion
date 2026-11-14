@@ -27,10 +27,10 @@ python seed/seed_course.py --course "Your course" --lecturer "Prof. Name"
 
 ## People and switching user
 
-Open http://localhost:8000/people to add students (one name per line) and teachers, enroll students in
-courses and give each course its teacher. The chip at the top right switches to any person; "Open as ↗"
-opens a tab as someone else, so you can show a teacher and a student side by side. The seeds create the
-course's teacher and ~120 enrolled students.
+Use the user chip at the top right to switch to any student or teacher. Its "Manage people" link opens
+the setup page (`/people`): add students (one name per line) and enroll them in courses, or add a teacher
+and create their courses right there. Each tab keeps its own user, so a teacher and a student can run side
+by side. The seeds create the course's teacher and ~120 enrolled students.
 
 ## Switch to a real LLM
 

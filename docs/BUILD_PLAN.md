@@ -158,7 +158,7 @@ All responses are JSON unless noted.
 
 **People (showcase addition)**
 - `GET /api/users?role=` → `[{id, name, role, course_ids}]` · `GET /api/users/{uid}`
-- `POST /api/users` `{name | names:[...], role, course_ids?}` · `PATCH /api/users/{uid}` `{name?, course_ids?}` · `DELETE /api/users/{uid}`
+- `POST /api/users` `{name | names:[...], role, course_ids?, new_courses?}` · `PATCH /api/users/{uid}` `{name?, course_ids?, new_courses?}` · `DELETE /api/users/{uid}` (`new_courses`: course names to create for a teacher)
 - `POST /api/users/join` `{name, course_id?}` → get-or-create a student (QR joiners)
 - `GET /api/courses?student_id=|teacher_id=` filters; `POST /api/courses` also takes `teacher_id`
 
@@ -320,9 +320,10 @@ _(Each session appends: phase, what was done, anything that differs from the con
 **Built:** real students and teachers instead of free-text names. `users` + `enrollments` tables and `courses.teacher_id` (`app/db.py`, added by `init_db()` with `ALTER TABLE` on old DBs), `app/routes_users.py`, the `/people` page (`static/people.html`, inline script), and a user switcher in the shared nav (`static/common.js`). Tested with the TestClient, curl and in the browser (desktop + 375 px).
 
 **How it works:**
-- `static/common.js`: `getCurrentUser()` / `setCurrentUser(u)` hold `{id, name, role}` per tab in `sessionStorage` (new tabs default to the last pick in `localStorage`), so two tabs can be two different people. `?as=<user id>` on any URL sets that tab's user ("Open as ↗" on /people). `getStudentName()` keeps its signature and returns the current user's name; with nobody picked it opens `showUserPicker()` (searchable, this course's students first, plus "New student? Join" → `POST /api/users/join`, so QR joiners still work). The old free-text name dialog is gone (`showNameDialog()` now opens the picker).
-- Nav: view tabs (Courses · People for students; Dashboard · Student view · People for teachers) and a user chip that opens the switcher. Picking a teacher goes to `/lecturer`; picking a student on `/lecturer` goes to `/`.
+- `static/common.js`: `getCurrentUser()` / `setCurrentUser(u)` hold `{id, name, role}` per tab in `sessionStorage` (new tabs default to the last pick in `localStorage`), so two tabs can be two different people. The nav switcher is the **only** way to change who you act as (/people is setup only, reached from the switcher's "Manage people"). `getStudentName()` keeps its signature and returns the current user's name; with nobody picked it opens `showUserPicker()` (searchable, this course's students first, plus "New student? Join" → `POST /api/users/join`, so QR joiners still work). The old free-text name dialog is gone (`showNameDialog()` now opens the picker).
+- Nav: students get no view tabs (logo = home); teachers get Dashboard · Student view. The user chip opens the switcher. Picking a teacher goes to `/lecturer`; picking a student on `/lecturer` goes to `/`.
 - Scoping (frontend only, no auth): `/` lists the student's enrolled courses (a teacher sees their own); `/lecturer` lists only the teacher's courses, "New course" uses the current teacher (no free-text lecturer field), and a non-teacher gets a "pick a teacher" card.
+- /people: add students (one per line) or a teacher; a teacher can be given existing courses (ticking one moves it to them) and/or **new courses** typed one per line, also from a teacher's Edit form.
 - Names are unique and are still the key in `student_name` columns: renaming a student on /people updates attempts / chat_messages / notes; renaming a teacher updates `courses.lecturer_name`. Deleting a user keeps their history (insights unchanged).
 - `backfill_users()` runs at startup (idempotent): old DBs get a teacher per `lecturer_name` and a student user per `student_name` found in the history, enrolled in that course.
 - Seeds: `seed_course.py` creates the `--lecturer` as a teacher user; `seed_fake_activity.py` creates every fake student as an enrolled user, so you can switch into any of them and see their chats, notes and attempts.
