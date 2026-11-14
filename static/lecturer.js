@@ -92,6 +92,11 @@ async function loadClasses() {
   const lectures = await api(`/api/courses/${cid}/lectures`);
   if (cid !== state.cid) return;
   state.lectures = lectures;
+  const examLecture = $('#exam-form [name="lecture_id"]');
+  examLecture.innerHTML = lectures.filter(l => l.status === 'ready').map(l =>
+    `<option value="${l.id}">Class ${l.number}: ${escapeHtml(l.title)}</option>`).join('')
+    || '<option value="">No ready class days</option>';
+  $('#exam-form button').disabled = !lectures.some(l => l.status === 'ready');
   $('#class-list').innerHTML = lectures.map(l => `
     <div class="flex flex-wrap items-center gap-4 rounded-xl bg-white border border-stone-200 p-4">
       <div class="w-10 h-10 rounded-lg bg-stone-100 grid place-items-center font-semibold text-stone-600">${l.number ?? ''}</div>
@@ -118,6 +123,11 @@ async function loadQuizzes() {
   const [lectures, quizzes] = await Promise.all([api(`/api/courses/${cid}/lectures`), api(`/api/courses/${cid}/quizzes`)]);
   if (cid !== state.cid) return;
   state.lectures = lectures;
+  const examLecture = $('#exam-form [name="lecture_id"]');
+  examLecture.innerHTML = lectures.filter(l => l.status === 'ready').map(l =>
+    `<option value="${l.id}">Class ${l.number}: ${escapeHtml(l.title)}</option>`).join('')
+    || '<option value="">No ready class days</option>';
+  $('#exam-form button').disabled = !lectures.some(l => l.status === 'ready');
   $('#gen-list').innerHTML = lectures.map(l => `
     <div class="rounded-xl bg-white border border-stone-200 p-4">
       <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full" style="background:${lecColor(l.number)}"></span>
@@ -137,6 +147,26 @@ async function loadQuizzes() {
   document.querySelectorAll('[data-gen]').forEach(b => b.onclick = () => generateQuiz(b));
   renderQuizList(quizzes);
 }
+
+$('#exam-form').onsubmit = async e => {
+  e.preventDefault();
+  if (!state.cid) return;
+  const form = e.target, btn = form.querySelector('button'), msg = $('#exam-msg');
+  const data = new FormData(form);
+  btn.disabled = true; msg.className = 'text-sm mt-2 text-stone-500'; msg.textContent = 'Generating exam questions…';
+  try {
+    const r = await api(`/api/courses/${state.cid}/exams`, { method: 'POST', body: {
+      lecture_id: Number(data.get('lecture_id')), title: data.get('title'), n: Number(data.get('n')),
+      is_oral: data.has('is_oral'), is_sample: data.has('is_sample'),
+    }});
+    msg.className = 'text-sm mt-2 text-emerald-700';
+    msg.textContent = 'Exam created and open for students in this course.';
+    const quizzes = await api(`/api/courses/${state.cid}/quizzes`);
+    renderQuizList(quizzes, r.quiz_id);
+  } catch (err) {
+    msg.className = 'text-sm mt-2 text-rose-700'; msg.textContent = err.message;
+  } finally { btn.disabled = false; }
+};
 
 async function generateQuiz(btn) {
   const lid = btn.dataset.gen, kind = btn.dataset.kind, msg = document.querySelector(`[data-genmsg="${lid}"]`);
@@ -162,7 +192,7 @@ async function generateQuiz(btn) {
 function renderQuizList(quizzes, highlightId) {
   $('#quiz-list').innerHTML = quizzes.map(q => `
     <div class="flex flex-wrap items-center gap-3 rounded-xl bg-white border ${q.id === highlightId ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-stone-200'} p-3">
-      <span class="text-xs font-medium px-2 py-0.5 rounded-full ${q.kind === 'live' ? 'bg-violet-100 text-violet-800' : 'bg-sky-100 text-sky-800'}">${q.kind === 'live' ? 'Live' : 'Homework'}</span>
+      <span class="text-xs font-medium px-2 py-0.5 rounded-full ${q.kind === 'exam' ? 'bg-amber-100 text-amber-800' : q.kind === 'live' ? 'bg-violet-100 text-violet-800' : 'bg-sky-100 text-sky-800'}">${q.kind === 'exam' ? `Exam${q.is_oral && q.is_sample ? ' · Oral + Sample' : q.is_oral ? ' · Oral' : ' · Sample'}` : q.kind === 'live' ? 'Live' : 'Homework'}</span>
       <div class="flex-1 min-w-[10rem]">
         <div class="font-medium text-sm truncate">${escapeHtml(q.title || 'Quiz')}</div>
         <div class="text-xs text-stone-500">${q.n_questions} questions · ${q.n_attempts} attempt${q.n_attempts === 1 ? '' : 's'}${q.avg_score != null ? ' · avg ' + pct(q.avg_score) : ''}</div>

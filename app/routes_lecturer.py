@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app import insights
 from app.db import UPLOAD_DIR, execute, query, query_one
-from app.ingest import process_lecture
+from app.ingest import generate_questions, process_lecture
 
 router = APIRouter(prefix="/api", tags=["lecturer"])
 
@@ -85,13 +85,50 @@ def regenerate_lecture(lid: int, background: BackgroundTasks):
 
 # ------------------------------------------------------------------ quizzes
 
+class ExamIn(BaseModel):
+    lecture_id: int
+    title: str = ""
+    n: int = 5
+    is_oral: bool = False
+    is_sample: bool = False
+
+
+@router.post("/courses/{cid}/exams")
+def create_exam(cid: int, body: ExamIn):
+    """Create a student-solvable exam from one ready class day, labeled oral/sample/both."""
+    _course(cid)
+    lec = query_one("SELECT id, title, status FROM lectures WHERE id=? AND course_id=?",
+                    (body.lecture_id, cid))
+    if not lec:
+        raise HTTPException(404, "Class day not found in this course")
+    if lec["status"] != "ready":
+        raise HTTPException(409, "The class day isn't ready yet")
+    if not body.is_oral and not body.is_sample:
+        raise HTTPException(400, "Select oral exam, sample exam, or both")
+    title = body.title.strip() or f"Exam: {lec['title']}"
+    n = max(1, min(body.n, 15))
+    try:
+        qid = generate_questions(body.lecture_id, kind="homework", n=n, title=title, is_open=True)
+        if not query_one("SELECT 1 FROM questions WHERE quiz_id=?", (qid,)):
+            execute("DELETE FROM quizzes WHERE id=?", (qid,))
+            raise HTTPException(502, "The AI returned no valid questions, try again")
+        execute("UPDATE quizzes SET kind='exam', is_oral=?, is_sample=? WHERE id=?",
+                (int(body.is_oral), int(body.is_sample), qid))
+        return {"quiz_id": qid, "title": title, "kind": "exam",
+                "is_oral": body.is_oral, "is_sample": body.is_sample}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Exam generation failed: {type(e).__name__}: {str(e)[:200]}")
+
 @router.get("/courses/{cid}/quizzes")
 def list_quizzes(cid: int, include_all: bool = False):
     """Homework and live quizzes (add ?include_all=true for bank and self-evaluation quizzes too)."""
     _course(cid)
-    kinds = "" if include_all else "AND z.kind IN ('homework','live')"
+    kinds = "" if include_all else "AND z.kind IN ('homework','live','exam')"
     rows = query(f"""
         SELECT z.id, z.lecture_id, l.number AS lecture_number, l.title AS lecture_title, z.kind, z.title,
+               z.is_oral, z.is_sample,
                z.is_open, z.created_at,
                (SELECT COUNT(*) FROM questions q WHERE q.quiz_id = z.id) AS n_questions,
                (SELECT COUNT(*) FROM attempts a WHERE a.quiz_id = z.id) AS n_attempts,

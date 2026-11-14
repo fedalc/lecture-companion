@@ -73,7 +73,7 @@ def homework_match_score(message: str, question: str) -> float:
 
 def find_open_homework_question(lid: int, text: str) -> dict | None:
     rows = query("SELECT q.id, q.text, q.topic_id FROM questions q JOIN quizzes z ON z.id = q.quiz_id "
-                 "WHERE z.lecture_id=? AND z.kind='homework' AND z.is_open=1", (lid,))
+                 "WHERE z.lecture_id=? AND z.kind IN ('homework','exam') AND z.is_open=1", (lid,))
     best, best_score = None, 0.0
     for r in rows:
         s = homework_match_score(text, r["text"])

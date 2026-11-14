@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS quizzes (
     lecture_id INTEGER REFERENCES lectures(id),
     kind TEXT NOT NULL,              -- homework | live | self_eval | bank
     title TEXT,
+    is_oral INTEGER DEFAULT 0,
+    is_sample INTEGER DEFAULT 0,
     is_open INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -130,6 +132,13 @@ def init_db() -> None:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(courses)")}
         if "teacher_id" not in cols:  # added for the multi-user showcase; old DBs get it here
             conn.execute("ALTER TABLE courses ADD COLUMN teacher_id INTEGER REFERENCES users(id)")
+
+        # Keep existing prototype databases compatible with newer quiz types.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(quizzes)").fetchall()}
+        if "is_oral" not in columns:
+            conn.execute("ALTER TABLE quizzes ADD COLUMN is_oral INTEGER DEFAULT 0")
+        if "is_sample" not in columns:
+            conn.execute("ALTER TABLE quizzes ADD COLUMN is_sample INTEGER DEFAULT 0")
 
 
 def _get_or_create_user(conn: sqlite3.Connection, name: str, role: str) -> sqlite3.Row:
