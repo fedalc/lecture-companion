@@ -104,13 +104,6 @@ CREATE TABLE IF NOT EXISTS enrollments (
     course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, course_id)
 );
-CREATE TABLE IF NOT EXISTS friendships (
-    requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    addressee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'pending',   -- pending | accepted
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (requester_id, addressee_id)
-);
 CREATE TABLE IF NOT EXISTS agent_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -136,19 +129,14 @@ def init_db() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
         conn.executescript(SCHEMA)
+        quiz_columns = {row[1] for row in conn.execute("PRAGMA table_info(quizzes)").fetchall()}
+        if "is_oral" not in quiz_columns:
+            conn.execute("ALTER TABLE quizzes ADD COLUMN is_oral INTEGER DEFAULT 0")
+        if "is_sample" not in quiz_columns:
+            conn.execute("ALTER TABLE quizzes ADD COLUMN is_sample INTEGER DEFAULT 0")
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(courses)")}
         if "teacher_id" not in cols:  # added for the multi-user showcase; old DBs get it here
             conn.execute("ALTER TABLE courses ADD COLUMN teacher_id INTEGER REFERENCES users(id)")
-        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
-        if "last_seen" not in ucols:  # presence for "friends online"
-            conn.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
-
-        # Keep existing prototype databases compatible with newer quiz types.
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(quizzes)").fetchall()}
-        if "is_oral" not in columns:
-            conn.execute("ALTER TABLE quizzes ADD COLUMN is_oral INTEGER DEFAULT 0")
-        if "is_sample" not in columns:
-            conn.execute("ALTER TABLE quizzes ADD COLUMN is_sample INTEGER DEFAULT 0")
 
 
 def _get_or_create_user(conn: sqlite3.Connection, name: str, role: str) -> sqlite3.Row:

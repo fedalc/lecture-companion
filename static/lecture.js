@@ -4,6 +4,15 @@ const student = getStudentName();
 let highlighted = null;   // passage quoted into the chat
 let lectureMd = null;     // markdown of the AI lecture (null until ready)
 let notes = [];
+let lectureTopics = [];
+let topicAnchors = [];
+let topicSlidePages = [];
+let pdfDocument = null;
+let slidePageElements = [];
+let syncUntil = 0;
+let resizeTimer = null;
+let slidesLoadStarted = false;
+let activeTopicIndex = -1;
 
 const $ = id => document.getElementById(id);
 const studentQ = `student_name=${encodeURIComponent(student)}`;
@@ -22,8 +31,13 @@ async function loadLecture() {
   document.title = `${lec.title} · Lecture Companion`;
   $('meta').textContent = `${course.name} · Class ${lec.number ?? ''}${lec.date ? ' · ' + lec.date : ''}`;
   $('title').textContent = lec.title;
-  $('topics').innerHTML = lec.topics.map(t =>
-    `<span title="${escapeHtml(t.summary)}" class="text-xs bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full">${escapeHtml(t.name)}</span>`).join('');
+  lectureTopics = lec.topics || [];
+  $('topics').innerHTML = lectureTopics.map((t, i) =>
+    `<button type="button" data-topic="${i}" title="Scroll to ${escapeHtml(t.name)} in the lecture and slides" class="topic-chip text-xs bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full hover:bg-indigo-100 hover:text-indigo-700">${escapeHtml(t.name)}</button>`).join('');
+  $('topics').onclick = e => {
+    const chip = e.target.closest('[data-topic]');
+    if (chip) syncTopic(Number(chip.dataset.topic), true);
+  };
 
   const body = document.querySelector('#lecture .lecture-prose');
   if (lec.status !== 'ready') {
@@ -33,8 +47,8 @@ async function loadLecture() {
     lectureMd = lec.lecture_md || '';
     renderLecture();
   }
-  $('slides').src = `/api/lectures/${lid}/slides`;
   $('slides-open').href = `/api/lectures/${lid}/slides`;
+  if (!slidesLoadStarted) { slidesLoadStarted = true; loadSlidePages(); }
 }
 
 /** Render the lecture markdown and mark every passage the student has a note on. */
@@ -43,6 +57,139 @@ function renderLecture() {
   const body = document.querySelector('#lecture .lecture-prose');
   body.innerHTML = marked.parse(lectureMd);
   notes.forEach(n => n.highlighted_text && markPassage(body, n));
+  buildTopicAnchors();
+}
+
+function normalizeTopic(text) {
+  return String(text || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function buildTopicAnchors() {
+  const body = document.querySelector('#lecture .lecture-prose');
+  if (!body || !lectureTopics.length) return;
+  const headings = [...body.querySelectorAll('h1,h2,h3,h4')];
+  const blocks = [...body.querySelectorAll('h1,h2,h3,h4,p,li')];
+  topicAnchors = lectureTopics.map((topic, i) => {
+    const name = normalizeTopic(topic.name);
+    let target = headings.find(h => normalizeTopic(h.textContent).includes(name) || name.includes(normalizeTopic(h.textContent)));
+    if (!target) target = blocks.find(b => normalizeTopic(b.textContent).includes(name));
+    if (!target && blocks.length) target = blocks[Math.round(i * (blocks.length - 1) / Math.max(1, lectureTopics.length - 1))];
+    if (target) target.classList.add('topic-anchor');
+    return target || body;
+  });
+}
+
+function topicWords(topic) {
+  return [...new Set(normalizeTopic(`${topic.name} ${topic.summary || ''}`).split(' ').filter(w => w.length > 3))];
+}
+
+async function loadSlidePages() {
+  const viewer = $('slides-viewer');
+  if (!window.pdfjsLib) {
+    viewer.innerHTML = '<div class="p-4 text-sm text-rose-700">The slide viewer could not load. Use “open PDF” to view the slides.</div>';
+    return;
+  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  viewer.innerHTML = '<div class="p-4 text-sm text-stone-500">Loading slides…</div>';
+  try {
+    pdfDocument = await pdfjsLib.getDocument(`/api/lectures/${lid}/slides`).promise;
+    const pageText = [];
+    for (let i = 1; i <= pdfDocument.numPages; i++) {
+      const page = await pdfDocument.getPage(i);
+      const content = await page.getTextContent();
+      pageText.push(content.items.map(item => item.str).join(' '));
+    }
+    topicSlidePages = lectureTopics.map((topic, index) => {
+      const terms = topicWords(topic);
+      const scores = pageText.map(text => {
+        const normalized = normalizeTopic(text);
+        const exact = normalized.includes(normalizeTopic(topic.name)) ? 100 : 0;
+        const overlap = terms.filter(word => normalized.includes(word)).length;
+        return exact + overlap;
+      });
+      const best = Math.max(...scores);
+      return best > 0 ? scores.indexOf(best) + 1
+        : Math.round(index * (pdfDocument.numPages - 1) / Math.max(1, lectureTopics.length - 1)) + 1;
+    });
+    await renderSlideCanvases();
+    viewer.addEventListener('scroll', onSlidesScroll, { passive: true });
+    document.querySelector('#lecture').addEventListener('scroll', onLectureScroll, { passive: true });
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer); resizeTimer = setTimeout(renderSlideCanvases, 180);
+    });
+    if (lectureTopics.length) syncTopic(0, false);
+  } catch (err) {
+    slidesLoadStarted = false;
+    viewer.innerHTML = `<div class="p-4 text-sm text-rose-700">Could not display slides here. <a class="underline" href="/api/lectures/${lid}/slides" target="_blank">Open the PDF</a>.</div>`;
+    console.error('Could not load PDF slides', err);
+  }
+}
+
+async function renderSlideCanvases() {
+  if (!pdfDocument) return;
+  const viewer = $('slides-viewer');
+  viewer.innerHTML = '';
+  slidePageElements = [];
+  const availableWidth = Math.max(260, viewer.clientWidth - 24);
+  for (let i = 1; i <= pdfDocument.numPages; i++) {
+    const page = await pdfDocument.getPage(i);
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(availableWidth / base.width, 1.6);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.className = 'slide-page'; canvas.dataset.slidePage = i;
+    const context = canvas.getContext('2d');
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(viewport.width * ratio);
+    canvas.height = Math.floor(viewport.height * ratio);
+    canvas.style.width = `${Math.floor(viewport.width)}px`;
+    canvas.style.height = `${Math.floor(viewport.height)}px`;
+    viewer.appendChild(canvas);
+    slidePageElements.push(canvas);
+    await page.render({ canvasContext: context, viewport: page.getViewport({ scale: scale * ratio }) }).promise;
+  }
+}
+
+function scrollWithin(container, target) {
+  const top = container.scrollTop + target.getBoundingClientRect().top - container.getBoundingClientRect().top - 18;
+  container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+}
+
+function syncTopic(index, animate = true, source = null) {
+  if (index < 0 || index >= lectureTopics.length) return;
+  if (source && index === activeTopicIndex) return;
+  activeTopicIndex = index;
+  syncUntil = Date.now() + (animate ? 220 : 60);
+  const anchor = topicAnchors[index];
+  if (source !== 'lecture' && anchor) scrollWithin($('lecture'), anchor);
+  const page = slidePageElements[topicSlidePages[index] - 1];
+  if (source !== 'slides' && page) scrollWithin($('slides-viewer'), page);
+  document.querySelectorAll('.topic-chip').forEach((chip, i) => {
+    chip.classList.toggle('bg-indigo-100', i === index);
+    chip.classList.toggle('text-indigo-700', i === index);
+  });
+}
+
+function onLectureScroll() {
+  if (Date.now() < syncUntil || !topicAnchors.length) return;
+  const containerTop = $('lecture').getBoundingClientRect().top + 35;
+  let active = 0;
+  topicAnchors.forEach((anchor, i) => { if (anchor.getBoundingClientRect().top <= containerTop) active = i; });
+  syncTopic(active, true, 'lecture');
+}
+
+function onSlidesScroll() {
+  if (Date.now() < syncUntil || !slidePageElements.length) return;
+  const threshold = $('slides-viewer').getBoundingClientRect().top + $('slides-viewer').clientHeight * 0.32;
+  let page = 1;
+  slidePageElements.forEach((el, i) => { if (el.getBoundingClientRect().top <= threshold) page = i + 1; });
+  let active = 0, best = Infinity;
+  topicSlidePages.forEach((topicPage, i) => {
+    const distance = Math.abs(topicPage - page);
+    if (distance < best) { best = distance; active = i; }
+  });
+  syncTopic(active, true, 'slides');
 }
 
 /** Wrap the first occurrence of the note's passage (inside one text node) in a <mark>. */
