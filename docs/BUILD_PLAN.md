@@ -244,6 +244,24 @@ _(Each session appends: phase, what was done, anything that differs from the con
 
 **Known issues:** in mock mode the lecture is a reformatted copy of the slides (by design). The real-provider paths (anthropic/openai) haven't been tested against a live key yet; Phase 4 must check them.
 
+### Phase 1: done (2026-11-14)
+**Built:** tutor chat, guardrails and notes (`app/routes_chat.py`), Phase 1 prompts (`TUTOR_*`, `REFUSAL_*` in `app/prompts.py`), and the class-day page (`static/lecture.html/.js`). Tested in mock mode with curl and in the browser: highlight → ask, plain question, "not covered" → `flagged`, open homework question → `refused`, add/list/delete notes, history and notes survive a reload.
+
+**How the tutor works:**
+- `POST /chat` first runs the **code guardrail**: it compares message + highlight with every question of the lecture's quizzes where `kind='homework' AND is_open=1`. It refuses (`refused=true`) when either check passes: the `difflib` text similarity is ≥ 0.75 (only when the message is ≥ 60% of the question's length), or ≥ 60% of the question's content words appear in the message (only when the question has ≥ 3 content words). The refusal prompt gets only the question text, **never the options or `correct_index`**.
+- Otherwise one `complete_json(kind="tutor")` call returns `{reply, covered, topic_id}`: `flagged = not covered`, and `topic_id` is checked against the lecture's topics. If the JSON fails, it falls back to a plain `complete(kind="chat")`.
+- `topic_id`, `flagged` and `refused` are stored on **both** the user row and the assistant row in `chat_messages`, so Phase 3 can count either one (count `role='user'` to avoid double counting).
+
+**Differences from the contract (additions only):** `DELETE /api/notes/{nid}?student_name=`. `GET /chat` and `GET /notes` take `?student_name=` (default `Guest`). `GET /chat` returns `{id, role, content, highlighted_text, topic_id, flagged, refused, created_at}`. `POST /notes` returns the new note row.
+
+**`app/llm.py`:** added mock kinds `tutor` (covered when there's a highlight or ≥ 2 content words overlap the material) and `refusal`. Existing branches are unchanged.
+
+**Page:** the bottom-right panel has "Ask the tutor" and "My notes (n)" tabs. Notes are written in an inline form (no `prompt()`), shown as cards, and marked in the lecture with `<mark>`. Clicking a mark jumps to its card and the other way round. Refused and flagged replies show a badge, in the live chat and in the history.
+
+**Known issues:** no LLM judge for the guardrail (fuzzy and token matching only), so a heavily reworded homework question can get through. A note's mark only appears when the passage sits inside one text node (a selection across bold text or list items isn't marked, but the note is still saved). Mock bank and homework questions share the template "Which statement best describes X?", so in mock mode pasting that template for another topic is also refused.
+
+**LLM provider (found during Phase 1):** the hackathon key is an **OpenRouter** key (`sk-or-v1-…`) whose staff guardrail allows only 5 models: `anthropic/claude-sonnet-5.5`, `anthropic/claude-haiku-5.5`, `openai/gpt-6.1-terra`, `openai/gpt-6-luna` and `deepseek/deepseek-v4.1-flash`. The key's spending limit is $10. Working `.env`: `LLM_PROVIDER=openai`, `OPENAI_BASE_URL=https://openrouter.ai/api/v1`, `LLM_MODEL=anthropic/claude-sonnet-5.5`, and the key in `OPENAI_API_KEY`. No code change is needed (`llm.py` already reads `OPENAI_BASE_URL`). Any other model returns a 404 "guardrail restrictions" error. When the LLM fails, `POST /chat` now returns a 502 with a short message.
+
 ### Phase 2: done (2026-11-14)
 **Built:** quizzes, QR, self-evaluation and the report (`app/routes_quiz.py`), the quiz page (`static/quiz.html/.js`), the self-evaluation page (`static/selfeval.html/.js`) and a homework list on the course home (`static/course.html`). Tested in mock mode with a script and in the browser (desktop and a 375 px phone viewport): create a homework quiz, take it, see results with explanations, QR/projector view with live results, self-evaluation → "Review this lecture" links.
 
