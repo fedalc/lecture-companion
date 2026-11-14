@@ -190,4 +190,27 @@ def _mock(kind: str, system: str, user: str) -> str:
                 f"{' '.join(best[1][:2]) or 'see the slides for this part.'}\n\n"
                 f"Try putting it in your own words: how would you explain *{best[0].lower()}* to a classmate?")
 
+    if kind == "tutor":  # Phase 1: tutor answer as JSON {reply, covered, topic_id}
+        msg, hl = _tag(user, "message"), _tag(user, "highlight")
+        topics = json.loads(_tag(user, "topics") or "[]")
+        words = _words(msg + " " + hl)
+        best_t = max(topics, key=lambda t: len(words & _words(t["name"] + " " + t.get("summary", ""))), default=None)
+        covered = bool(hl) or len(_words(msg) & _words(material + " " + _tag(user, "lecture"))) >= 2
+        if not covered:
+            return json.dumps({"reply": "*(mock tutor)* That isn't covered in this class's material, so I won't "
+                                        "guess. I've passed your question on to your lecturer.",
+                               "covered": False, "topic_id": None})
+        reply = _mock("chat", system, user)
+        return json.dumps({"reply": reply, "covered": True, "topic_id": best_t["id"] if best_t else None})
+
+    if kind == "refusal":  # Phase 1: guiding refusal for open homework questions
+        topics = json.loads(_tag(user, "topics") or "[]")
+        q = _tag(user, "homework_question")
+        t = max(topics, key=lambda t: len(_words(q) & _words(t["name"] + " " + t.get("summary", ""))), default=None)
+        # mock quiz options are topic summaries, so only name the topic (never echo the summary)
+        idea = f"the section on **{t['name']}**" if t else "the related section of the lecture"
+        return (f"*(mock tutor)* That looks like a question from your **open homework**, so I won't give you the "
+                f"answer. It's about {idea}: think about how the lecture introduces it and what it contrasts it with.\n\n"
+                f"Re-read that part of the lecture, then ask yourself: which option matches how the lecture *defines* it?")
+
     return f"(mock {kind} response)"
