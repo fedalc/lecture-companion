@@ -339,4 +339,6 @@ _(Each session appends: phase, what was done, anything that differs from the con
 - `POST /api/users/{uid}/friends/{oid}/accept`, `DELETE /api/users/{uid}/friends/{oid}` (decline, cancel or unfriend).
 - `POST /api/users/{uid}/seen`: every open, visible page pings it each 60 s; "online" = seen in the last 3 minutes.
 
+**Demo data:** `python seed/seed_friends.py` (after `seed_fake_activity.py`) replaces all friendships with a random network: each student gets a random number of friends (`--min 1 --max 8`, mostly classmates, `--classmates 0.85`) plus 0–`--pending 2` incoming requests. `--keep` adds instead of replacing, `--seed` makes it repeatable. A student can end up a bit above `--max` because others pick them too.
+
 **Known issues:** no auth (anyone acting as a student can send/accept for them). The streak card is still hard-coded. Seeded fake students are never "online" unless someone switches into them in a tab.
