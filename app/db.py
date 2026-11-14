@@ -104,15 +104,6 @@ CREATE TABLE IF NOT EXISTS enrollments (
     course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, course_id)
 );
-CREATE TABLE IF NOT EXISTS friend_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    to_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'pending', -- pending | accepted | declined
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(from_user_id, to_user_id)
-);
 CREATE TABLE IF NOT EXISTS agent_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT DEFAULT CURRENT_TIMESTAMP,

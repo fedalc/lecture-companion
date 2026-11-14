@@ -5,6 +5,7 @@
   <title>Class day · Lecture Companion</title>
   <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <link rel="stylesheet" href="/static/common.css">
   <style>
     .tab-btn { color: #a8a29e; border-bottom: 2px solid transparent; text-transform: uppercase; }
@@ -13,6 +14,8 @@
     mark.note-mark { background: #fef3c7; border-bottom: 2px solid #f59e0b; padding: 0 1px; cursor: pointer; border-radius: 2px; }
     mark.note-mark.flash { background: #fde68a; transition: background .3s; }
     .msg-assistant ul, .msg-assistant ol { padding-left: 1.2rem; list-style: disc; }
+    .slide-page { margin: 12px auto; max-width: 100%; background: white; box-shadow: 0 1px 5px #0002; }
+    .topic-anchor { scroll-margin-top: 1rem; }
   </style>
 </head>
 <!-- Phase 1 owns this page: 3-panel layout, lecture + slides, tutor chat, highlight-to-ask, notes. -->
@@ -34,9 +37,9 @@
     <section class="min-h-0 grid grid-rows-2">
       <div class="min-h-0 flex flex-col border-b border-stone-200">
         <div class="h-9 shrink-0 px-4 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-stone-400 bg-stone-50 border-b border-stone-200">
-          Slides <a id="slides-open" target="_blank" class="normal-case font-normal text-indigo-600 hover:underline">open in new tab ↗</a>
+          Slides <span class="normal-case font-normal text-stone-400">· topic sync</span><a id="slides-open" target="_blank" class="normal-case font-normal text-indigo-600 hover:underline">open PDF ↗</a>
         </div>
-        <iframe id="slides" class="flex-1 w-full bg-stone-100" title="Slides"></iframe>
+        <div id="slides-viewer" class="panel-scroll flex-1 w-full bg-stone-100 p-2" aria-label="Course slides"></div>
       </div>
       <div class="min-h-0 flex flex-col bg-white">
         <div class="h-9 shrink-0 px-2 flex items-stretch text-xs font-semibold uppercase tracking-wide bg-stone-50 border-b border-stone-200">

@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import llm, routes_chat, routes_friends, routes_lecturer, routes_quiz, routes_users
+from app import llm, routes_chat, routes_lecturer, routes_quiz, routes_users
 from app.db import backfill_users, init_db, query, query_one
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,7 +25,6 @@ app.include_router(routes_chat.router)      # Phase 1
 app.include_router(routes_quiz.router)      # Phase 2
 app.include_router(routes_lecturer.router)  # Phase 3
 app.include_router(routes_users.router)     # multi-user showcase
-app.include_router(routes_friends.router)   # student friends and requests
 
 
 # ------------------------------------------------------------------ shared API (Phase 0)
