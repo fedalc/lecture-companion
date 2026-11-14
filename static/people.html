@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>People · Lecture Companion</title>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <link rel="stylesheet" href="/static/common.css">
+</head>
+<!-- Multi-user showcase: set up students and teachers, then act as any of them. Script is inline. -->
+<body class="flex flex-col">
+  <main class="max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+    <h1 class="text-2xl font-semibold tracking-tight">People</h1>
+    <p class="text-stone-500">Set up the students and teachers for the demo, then act as any of them.</p>
+
+    <form id="add-form" class="mt-6 rounded-2xl bg-white border border-stone-200 p-4 sm:p-5 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-start">
+      <div>
+        <div class="flex rounded-lg bg-stone-100 p-0.5 w-max text-sm" id="role-toggle">
+          <button type="button" data-role="student" class="px-3 py-1 rounded-md">Students</button>
+          <button type="button" data-role="teacher" class="px-3 py-1 rounded-md">Teacher</button>
+        </div>
+        <textarea name="names" required rows="3" class="mt-3 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="One name per line, e.g.&#10;Giulia Rossi&#10;Marco Bianchi"></textarea>
+      </div>
+      <div class="text-sm">
+        <div class="font-medium" id="courses-label">Enroll in courses</div>
+        <div id="add-courses" class="mt-2 flex flex-wrap gap-2"></div>
+      </div>
+      <div class="flex flex-col gap-2">
+        <button class="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-medium hover:bg-indigo-700">Add</button>
+        <div id="add-msg" class="text-xs text-stone-500 max-w-[12rem]"></div>
+      </div>
+    </form>
+
+    <input id="search" type="search" placeholder="Search people…"
+      class="mt-6 w-full sm:w-80 rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+
+    <div class="mt-4 grid gap-6 lg:grid-cols-2">
+      <section>
+        <h2 class="font-semibold">Teachers <span id="n-teachers" class="text-stone-400 font-normal"></span></h2>
+        <div id="teachers" class="mt-2 grid gap-2"></div>
+      </section>
+      <section>
+        <h2 class="font-semibold">Students <span id="n-students" class="text-stone-400 font-normal"></span></h2>
+        <div id="students" class="mt-2 grid gap-2"></div>
+        <button id="more" class="hidden mt-3 text-sm text-indigo-600 hover:underline"></button>
+      </section>
+    </div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    renderNav('people', [{ label: 'People' }]);
+    const $ = s => document.querySelector(s);
+    const PAGE = 40;
+    const state = { users: [], courses: [], role: 'student', editing: null, showAll: false };
+    const courseName = id => (state.courses.find(c => c.id === id) || {}).name || `Course ${id}`;
+
+    function courseChecks(selected, prefix) {
+      if (!state.courses.length) return '<span class="text-stone-400 text-sm">No courses yet. A teacher can create one on the dashboard.</span>';
+      return state.courses.map(c => `<label class="inline-flex items-center gap-1.5 rounded-full border border-stone-300 px-3 py-1 text-sm cursor-pointer has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+        <input type="checkbox" name="${prefix}" value="${c.id}" ${selected.includes(c.id) ? 'checked' : ''} class="accent-indigo-600">
+        ${escapeHtml(c.name)}</label>`).join('');
+    }
+
+    function setRole(role) {
+      state.role = role;
+      document.querySelectorAll('#role-toggle button').forEach(b => {
+        const on = b.dataset.role === role;
+        b.classList.toggle('bg-white', on); b.classList.toggle('shadow-sm', on);
+        b.classList.toggle('text-stone-900', on); b.classList.toggle('text-stone-500', !on);
+      });
+      $('#courses-label').textContent = role === 'teacher' ? 'Courses this teacher runs' : 'Enroll in courses';
+    }
+    document.querySelectorAll('#role-toggle button').forEach(b => b.onclick = () => setRole(b.dataset.role));
+
+    function userRow(u) {
+      const me = getCurrentUser();
+      const isMe = me && me.id === u.id;
+      const home = u.role === 'teacher' ? '/lecturer' : '/';
+      const chips = u.course_ids.length
+        ? u.course_ids.map(id => `<span class="text-xs rounded-full bg-stone-100 text-stone-600 px-2 py-0.5">${escapeHtml(courseName(id))}</span>`).join(' ')
+        : `<span class="text-xs text-stone-400">${u.role === 'teacher' ? 'no courses' : 'not enrolled'}</span>`;
+      if (state.editing === u.id) {
+        return `<form data-edit="${u.id}" class="rounded-xl bg-white border border-indigo-300 p-3 grid gap-3">
+          <input name="name" required maxlength="60" value="${escapeHtml(u.name)}" class="rounded-lg border border-stone-300 px-3 py-1.5 text-sm">
+          <div class="flex flex-wrap gap-2">${courseChecks(u.course_ids, 'course')}</div>
+          <div class="flex flex-wrap gap-2 text-sm">
+            <button class="rounded-lg bg-indigo-600 text-white px-3 py-1.5 font-medium hover:bg-indigo-700">Save</button>
+            <button type="button" data-cancel class="rounded-lg px-3 py-1.5 text-stone-500 hover:text-stone-900">Cancel</button>
+            <button type="button" data-delete="${u.id}" class="ml-auto rounded-lg px-3 py-1.5 text-rose-600 hover:bg-rose-50">Delete</button>
+          </div></form>`;
+      }
+      return `<div class="rounded-xl bg-white border ${isMe ? 'border-indigo-400 ring-1 ring-indigo-200' : 'border-stone-200'} p-3 flex items-center gap-3">
+        <span class="w-9 h-9 shrink-0 rounded-full ${u.role === 'teacher' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'} grid place-items-center text-sm font-semibold">${escapeHtml(initials(u.name))}</span>
+        <div class="flex-1 min-w-0">
+          <div class="font-medium truncate">${escapeHtml(u.name)} ${isMe ? '<span class="text-xs text-indigo-600 font-normal">· you</span>' : ''}</div>
+          <div class="mt-0.5 flex flex-wrap gap-1">${chips}</div>
+        </div>
+        <div class="flex items-center gap-1 shrink-0 text-sm">
+          <button data-act="${u.id}" class="rounded-lg bg-indigo-600 text-white px-3 py-1.5 font-medium hover:bg-indigo-700 ${isMe ? 'opacity-40 pointer-events-none' : ''}">Act as</button>
+          <a href="${home}?as=${u.id}" target="_blank" title="Open a new tab as ${escapeHtml(u.name)}" class="hidden sm:inline rounded-lg px-2 py-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900">Open as ↗</a>
+          <button data-editbtn="${u.id}" title="Edit" class="rounded-lg px-2 py-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900">Edit</button>
+        </div></div>`;
+    }
+
+    function draw() {
+      const q = $('#search').value.trim().toLowerCase();
+      const match = u => !q || u.name.toLowerCase().includes(q) || u.course_ids.some(id => courseName(id).toLowerCase().includes(q));
+      const teachers = state.users.filter(u => u.role === 'teacher' && match(u));
+      const students = state.users.filter(u => u.role === 'student' && match(u));
+      $('#n-teachers').textContent = `· ${teachers.length}`;
+      $('#n-students').textContent = `· ${students.length}`;
+      $('#teachers').innerHTML = teachers.map(userRow).join('') || '<div class="text-sm text-stone-400">No teachers yet.</div>';
+      const shown = state.showAll || q ? students : students.slice(0, PAGE);
+      $('#students').innerHTML = shown.map(userRow).join('') || '<div class="text-sm text-stone-400">No students yet.</div>';
+      const more = $('#more');
+      more.classList.toggle('hidden', shown.length >= students.length);
+      more.textContent = `Show all ${students.length} students`;
+    }
+    $('#more').onclick = () => { state.showAll = true; draw(); };
+    $('#search').oninput = draw;
+
+    async function load() {
+      [state.users, state.courses] = await Promise.all([api('/api/users'), api('/api/courses')]);
+      $('#add-courses').innerHTML = courseChecks(state.courses.length === 1 ? [state.courses[0].id] : [], 'add-course');
+      draw();
+    }
+
+    $('#add-form').onsubmit = async e => {
+      e.preventDefault();
+      const f = e.target;
+      const names = f.names.value.split('\n').map(s => s.trim()).filter(Boolean);
+      const course_ids = [...f.querySelectorAll('input[name=add-course]:checked')].map(i => +i.value);
+      const msg = $('#add-msg');
+      try {
+        const created = await api('/api/users', { method: 'POST', body: { names, role: state.role, course_ids } });
+        const skipped = names.length - created.length;
+        msg.className = 'text-xs text-emerald-700 max-w-[12rem]';
+        msg.textContent = `Added ${created.length}` + (skipped ? `, skipped ${skipped} existing name${skipped > 1 ? 's' : ''}` : '') + '.';
+        f.names.value = '';
+        await load();
+      } catch (err) { msg.className = 'text-xs text-rose-600 max-w-[12rem]'; msg.textContent = err.message; }
+    };
+
+    document.addEventListener('click', async e => {
+      const t = e.target.closest('[data-act],[data-editbtn],[data-cancel],[data-delete]');
+      if (!t) return;
+      if (t.dataset.act) {
+        const u = state.users.find(x => String(x.id) === t.dataset.act);
+        setCurrentUser(u);
+        location.href = u.role === 'teacher' ? '/lecturer' : '/';
+      } else if (t.dataset.editbtn) { state.editing = +t.dataset.editbtn; draw(); }
+      else if (t.hasAttribute('data-cancel')) { state.editing = null; draw(); }
+      else if (t.dataset.delete) {
+        const u = state.users.find(x => String(x.id) === t.dataset.delete);
+        if (!confirm(`Delete ${u.name}? Their past chats and quiz attempts stay in the insights.`)) return;
+        await api(`/api/users/${u.id}`, { method: 'DELETE' });
+        const me = getCurrentUser();
+        if (me && me.id === u.id) setCurrentUser(null);
+        state.editing = null; await load(); renderNavAgain();
+      }
+    });
+    document.addEventListener('submit', async e => {
+      const f = e.target.closest('[data-edit]');
+      if (!f) return;
+      e.preventDefault();
+      const uid = +f.dataset.edit;
+      const course_ids = [...f.querySelectorAll('input[name=course]:checked')].map(i => +i.value);
+      try {
+        const u = await api(`/api/users/${uid}`, { method: 'PATCH', body: { name: f.name.value, course_ids } });
+        const me = getCurrentUser();
+        if (me && me.id === uid) setCurrentUser(u);
+        state.editing = null; await load(); renderNavAgain();
+      } catch (err) { alert(err.message); }
+    });
+    function renderNavAgain() { document.querySelector('header')?.remove(); renderNav('people', [{ label: 'People' }]); }
+
+    setRole('student');
+    load();
+  </script>
+</body>
+</html>

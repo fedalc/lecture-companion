@@ -1,5 +1,7 @@
 // Lecturer page (Phase 3): class days + upload, quizzes, insights dashboard.
 renderNav('lecturer', [{ label: 'Lecturer' }]);
+const me = getCurrentUser();
+const isTeacher = !!me && me.role === 'teacher';
 
 const $ = s => document.querySelector(s);
 const state = { cid: null, tab: 'class', lectures: [], insights: null, chart: null, pollTimer: null, liveTimer: null };
@@ -39,7 +41,7 @@ function refreshTab() {
 
 // ------------------------------------------------------------------ courses
 async function loadCourses(selectId) {
-  const courses = await api('/api/courses');
+  const courses = await api(`/api/courses?teacher_id=${me.id}`);
   const sel = $('#course-select');
   sel.innerHTML = courses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')
     || '<option value="">No courses yet</option>';
@@ -47,6 +49,8 @@ async function loadCourses(selectId) {
   if (courses.some(c => String(c.id) === String(saved))) sel.value = saved;
   state.cid = sel.value || null;
   if (!courses.length) $('#new-course-form').classList.remove('hidden');
+  $('#no-course').classList.toggle('hidden', courses.length > 0);
+  document.querySelectorAll('[data-panel], #tabs').forEach(el => el.classList.toggle('invisible', !courses.length));
 }
 $('#course-select').onchange = e => {
   state.cid = e.target.value; localStorage.setItem('lecturer_course', state.cid);
@@ -58,7 +62,7 @@ $('#new-course-cancel').onclick = () => $('#new-course-form').classList.add('hid
 $('#new-course-form').onsubmit = async e => {
   e.preventDefault();
   const f = new FormData(e.target);
-  const c = await api('/api/courses', { method: 'POST', body: { name: f.get('name'), lecturer_name: f.get('lecturer_name') } });
+  const c = await api('/api/courses', { method: 'POST', body: { name: f.get('name'), teacher_id: me.id } });
   e.target.reset(); e.target.classList.add('hidden');
   localStorage.setItem('lecturer_course', c.id);
   await loadCourses(c.id);
@@ -312,7 +316,24 @@ function renderList(sel, items, flagged) {
 
 // ------------------------------------------------------------------ start
 const startTab = ['class', 'quizzes', 'insights'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'class';
-loadCourses().then(() => showTab(startTab));
+if (isTeacher) {
+  $('#teacher-name').textContent = me.name;
+  loadCourses().then(() => showTab(startTab));
+} else {
+  // the dashboard belongs to a teacher: ask who
+  document.querySelector('main').innerHTML = `
+    <div class="max-w-md mx-auto mt-10 rounded-2xl bg-white border border-stone-200 p-6 text-center">
+      <div class="text-lg font-semibold">The dashboard is for teachers</div>
+      <p class="text-stone-500 mt-1">${me ? `You're acting as the student <b>${escapeHtml(me.name)}</b> right now.` : 'Nobody is selected yet.'} Pick a teacher to continue.</p>
+      <div id="teacher-pick" class="mt-4 grid gap-2"></div>
+      <a href="/people" class="mt-4 inline-block text-sm text-indigo-600 hover:underline">Manage people →</a>
+    </div>`;
+  api('/api/users?role=teacher').then(ts => {
+    $('#teacher-pick').innerHTML = ts.map(t => `<button data-t="${t.id}" class="rounded-lg border border-stone-200 px-4 py-2 hover:border-indigo-400 hover:bg-indigo-50 text-left">${escapeHtml(t.name)}</button>`).join('')
+      || '<p class="text-sm text-stone-400">No teachers yet. Add one on the People page.</p>';
+    document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { setCurrentUser(ts.find(t => String(t.id) === b.dataset.t)); location.reload(); });
+  });
+}
 window.addEventListener('hashchange', () => {
   const t = location.hash.slice(1);
   if (['class', 'quizzes', 'insights'].includes(t) && t !== state.tab) showTab(t);

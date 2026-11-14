@@ -91,6 +91,17 @@ CREATE TABLE IF NOT EXISTS notes (
     content TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,       -- also the key used in student_name columns
+    role TEXT NOT NULL,              -- student | teacher
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS enrollments (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, course_id)
+);
 CREATE TABLE IF NOT EXISTS agent_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -116,6 +127,46 @@ def init_db() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
         conn.executescript(SCHEMA)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(courses)")}
+        if "teacher_id" not in cols:  # added for the multi-user showcase; old DBs get it here
+            conn.execute("ALTER TABLE courses ADD COLUMN teacher_id INTEGER REFERENCES users(id)")
+
+
+def _get_or_create_user(conn: sqlite3.Connection, name: str, role: str) -> sqlite3.Row:
+    """The user with this name (whatever its role), creating it with `role` if missing."""
+    u = conn.execute("SELECT id, role FROM users WHERE name=?", (name,)).fetchone()
+    if not u:
+        conn.execute("INSERT INTO users (name, role) VALUES (?,?)", (name, role))
+        u = conn.execute("SELECT id, role FROM users WHERE name=?", (name,)).fetchone()
+    return u
+
+
+def backfill_users() -> None:
+    """Idempotent: turn existing free-text identities into users.
+    Courses with a lecturer_name but no teacher_id get a teacher user; every student_name found in
+    attempts / chat_messages / notes becomes a student user enrolled in that course."""
+    with connect() as conn:
+        for c in conn.execute("SELECT id, lecturer_name FROM courses WHERE teacher_id IS NULL "
+                              "AND TRIM(COALESCE(lecturer_name,'')) != ''").fetchall():
+            name = c["lecturer_name"].strip()
+            u = _get_or_create_user(conn, name, "teacher")
+            if u["role"] == "teacher":
+                conn.execute("UPDATE courses SET teacher_id=? WHERE id=?", (u["id"], c["id"]))
+        pairs = conn.execute("""
+            SELECT DISTINCT a.student_name AS name, z.course_id AS cid
+              FROM attempts a JOIN quizzes z ON z.id = a.quiz_id
+            UNION SELECT DISTINCT m.student_name, l.course_id
+              FROM chat_messages m JOIN lectures l ON l.id = m.lecture_id
+            UNION SELECT DISTINCT n.student_name, l.course_id
+              FROM notes n JOIN lectures l ON l.id = n.lecture_id""").fetchall()
+        for p in pairs:
+            name = (p["name"] or "").strip()
+            if not name or name == "Guest":
+                continue
+            u = _get_or_create_user(conn, name, "student")
+            if u["role"] == "student":
+                conn.execute("INSERT OR IGNORE INTO enrollments (user_id, course_id) VALUES (?,?)",
+                             (u["id"], p["cid"]))
 
 
 def query(sql: str, params: tuple = ()) -> list[dict]:

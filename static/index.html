@@ -17,9 +17,15 @@
     renderNav('student', [{ label: 'Courses' }]);
     (async () => {
       const box = document.getElementById('courses');
-      const courses = await api('/api/courses');
+      const me = getCurrentUser();
+      if (!me) { showUserPicker(); box.innerHTML = comingSoon('Choose who you are', 'pick yourself from the list'); return; }
+      const teacher = me.role === 'teacher';
+      if (teacher) document.querySelector('h1 + p').innerHTML = `Student view of your courses. Manage them on the <a href="/lecturer" class="text-indigo-600 hover:underline">dashboard</a>.`;
+      const courses = await api(`/api/courses?${teacher ? 'teacher_id' : 'student_id'}=${me.id}`);
       if (!courses.length) {
-        box.innerHTML = comingSoon('No courses yet', 'run python seed/seed_course.py, or create one as lecturer');
+        box.innerHTML = `<div class="sm:col-span-2 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-stone-500">
+          <div class="font-medium text-stone-700">${teacher ? "You don't run any course yet" : `${escapeHtml(me.name)} isn't enrolled in any course yet`}</div>
+          <div class="text-sm mt-1">${teacher ? 'Create one on the <a href="/lecturer" class="text-indigo-600 hover:underline">dashboard</a>.' : 'Enroll them on the <a href="/people" class="text-indigo-600 hover:underline">People</a> page.'}</div></div>`;
         return;
       }
       box.innerHTML = courses.map(c => `
