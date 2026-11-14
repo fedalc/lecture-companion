@@ -23,6 +23,10 @@ Time budget is 3–4 hours in total, so favour working and simple over complete.
 - When the phase is finished: append a "Phase N: done" entry to section 9 of `docs/BUILD_PLAN.md`
   (what was built, contract differences, known issues), then commit on a branch named `phase-N`.
 
+- **Budget: only about 10 EUR of LLM credits in total.** Don't overdo real-LLM tests. Develop and test in
+  mock mode, and only make a few real-provider calls to sanity-check a prompt (never loops, bulk runs or
+  repeated re-runs). Use small inputs and the cheapest model that works.
+
 ## Commands
 ```bash
 pip install -r requirements.txt

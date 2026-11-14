@@ -25,6 +25,13 @@ Put 2–3 lecture PDFs in `seed/material/`, named `01_Topic.pdf`, `02_Topic.pdf`
 python seed/seed_course.py --course "Your course" --lecturer "Prof. Name"
 ```
 
+## People and switching user
+
+Use the user chip at the top right to switch to any student or teacher. Its "Manage people" link opens
+the setup page (`/people`): add students (one name per line) and enroll them in courses, or add a teacher
+and create their courses right there. Each tab keeps its own user, so a teacher and a student can run side
+by side. The seeds create the course's teacher and ~120 enrolled students.
+
 ## Switch to a real LLM
 
 In `.env`, set `LLM_PROVIDER=anthropic` (or `openai`) and the matching API key, then re-run the seed script.

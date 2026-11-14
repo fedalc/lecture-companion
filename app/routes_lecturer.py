@@ -28,6 +28,7 @@ def _course(cid: int) -> dict:
 class CourseIn(BaseModel):
     name: str
     lecturer_name: str = ""
+    teacher_id: int | None = None   # multi-user: the owning teacher; lecturer_name is taken from it
 
 
 @router.post("/courses")
@@ -35,8 +36,15 @@ def create_course(body: CourseIn):
     name = body.name.strip()
     if not name:
         raise HTTPException(400, "Course name is required")
-    cid = execute("INSERT INTO courses (name, lecturer_name) VALUES (?,?)", (name, body.lecturer_name.strip()))
-    return {"id": cid, "name": name, "lecturer_name": body.lecturer_name.strip()}
+    lecturer = body.lecturer_name.strip()
+    if body.teacher_id is not None:
+        t = query_one("SELECT name FROM users WHERE id=? AND role='teacher'", (body.teacher_id,))
+        if not t:
+            raise HTTPException(400, "teacher_id is not a teacher")
+        lecturer = t["name"]
+    cid = execute("INSERT INTO courses (name, lecturer_name, teacher_id) VALUES (?,?,?)",
+                  (name, lecturer, body.teacher_id))
+    return {"id": cid, "name": name, "lecturer_name": lecturer, "teacher_id": body.teacher_id}
 
 
 @router.post("/courses/{cid}/lectures")

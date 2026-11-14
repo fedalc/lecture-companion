@@ -14,7 +14,7 @@
     <div class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Lecturer dashboard</h1>
-        <p class="text-stone-500">Upload material, run quizzes, and see where students get stuck.</p>
+        <p class="text-stone-500"><b id="teacher-name" class="text-stone-700 font-medium"></b> · Upload material, run quizzes, and see where students get stuck.</p>
       </div>
       <div class="flex items-center gap-2">
         <select id="course-select" class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white max-w-[16rem]"></select>
@@ -25,11 +25,12 @@
     <form id="new-course-form" class="hidden mt-4 rounded-xl bg-white border border-stone-200 p-4 flex flex-wrap gap-3 items-end">
       <label class="text-sm flex-1 min-w-[12rem]">Course name
         <input name="name" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="e.g. Analysis II"></label>
-      <label class="text-sm flex-1 min-w-[12rem]">Lecturer
-        <input name="lecturer_name" class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="e.g. Prof. Rossi"></label>
       <button class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700">Create course</button>
       <button type="button" id="new-course-cancel" class="text-sm text-stone-500 px-2 py-2">Cancel</button>
     </form>
+
+    <div id="no-course" class="hidden mt-4 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-5 text-stone-600 text-sm">
+      You don't run any course yet. Create one above, or assign an existing course to you on the <a href="/people" class="text-indigo-600 hover:underline">People</a> page.</div>
 
     <div class="mt-6 border-b border-stone-200 flex gap-6 text-sm" id="tabs">
       <button data-tab="class" class="pb-2 border-b-2 border-indigo-600 text-stone-900 font-medium">Class</button>

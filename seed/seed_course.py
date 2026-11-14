@@ -56,7 +56,10 @@ def main():
             f.unlink()
 
     print(f"LLM: {PROVIDER}:{MODEL}")
-    cid = execute("INSERT INTO courses (name, lecturer_name) VALUES (?,?)", (course_name, lecturer))
+    teacher = query_one("SELECT id, role FROM users WHERE name=?", (lecturer,))
+    tid = teacher["id"] if teacher and teacher["role"] == "teacher" else \
+        execute("INSERT INTO users (name, role) VALUES (?, 'teacher')", (lecturer,))
+    cid = execute("INSERT INTO courses (name, lecturer_name, teacher_id) VALUES (?,?,?)", (course_name, lecturer, tid))
     start = date.today() - timedelta(days=7 * (len(pdfs) - 1))
     for i, pdf in enumerate(pdfs, 1):
         lid = execute("INSERT INTO lectures (course_id, number, title, date, status) VALUES (?,?,?,?,'uploaded')",
@@ -68,7 +71,7 @@ def main():
         process_lecture(lid)
         print(query_one("SELECT status FROM lectures WHERE id=?", (lid,))["status"])
 
-    print(f"\nDone. Course id {cid}. Start the app and open http://localhost:8000/course/{cid}")
+    print(f"\nDone. Course id {cid}, teacher '{lecturer}' (user {tid}). Add students on http://localhost:8000/people")
 
 
 if __name__ == "__main__":
