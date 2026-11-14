@@ -329,3 +329,14 @@ _(Each session appends: phase, what was done, anything that differs from the con
 - Seeds: `seed_course.py` creates the `--lecturer` as a teacher user; `seed_fake_activity.py` creates every fake student as an enrolled user, so you can switch into any of them and see their chats, notes and attempts.
 
 **Known issues:** no auth, anyone can act as anyone (by design for the showcase). Courses can't be deleted from the UI. A teacher previewing a class day chats under their own name, which counts as one more "student" in the insights totals.
+
+### Showcase: friends — done (2026-11-14)
+**Built:** real friends between students instead of the hard-coded "Giulia, Marco and Sara" card. `friendships` table (`requester_id, addressee_id, status pending|accepted`, cascades on user delete) and `users.last_seen` (added by `init_db()` with `ALTER TABLE` on old DBs), `app/routes_friends.py`, a heartbeat in `static/common.js` (`startHeartbeat()`, called by `renderNav`), and the friends card + "Friends" dialog on `/` (`static/index.html`). A teacher's "Student view" now shows only "Your courses" (no streak/friends/tasks). Tested with the TestClient and in the browser.
+
+**API (new, additions only):**
+- `GET /api/users/{uid}/friends` → `{friends:[{id, name, online, last_seen}], incoming, outgoing, n_online}` (students only, 400 for teachers).
+- `POST /api/users/{uid}/friends` `{to_id}` → `{status}`; if `to_id` already asked you, it accepts instead.
+- `POST /api/users/{uid}/friends/{oid}/accept`, `DELETE /api/users/{uid}/friends/{oid}` (decline, cancel or unfriend).
+- `POST /api/users/{uid}/seen`: every open, visible page pings it each 60 s; "online" = seen in the last 3 minutes.
+
+**Known issues:** no auth (anyone acting as a student can send/accept for them). The streak card is still hard-coded. Seeded fake students are never "online" unless someone switches into them in a tab.
