@@ -115,6 +115,14 @@ agent_logs     (id, ts, kind, lecture_id NULL, prompt, response, model, latency_
 
 **Student identity:** there's no auth. The student enters a name once and it's kept in `localStorage`, then sent as `student_name`.
 
+**People (added for the showcase, see Phase log "Showcase: multi-user"):**
+```
+users        (id, name UNIQUE, role['student'|'teacher'], created_at)
+enrollments  (user_id, course_id)          -- students ↔ courses
+courses      + teacher_id NULL              -- the course's teacher; lecturer_name mirrors their name
+```
+Still no auth: the current user is picked in the nav switcher and their **name** is what's sent as `student_name`.
+
 ---
 
 ## 5. API contract (shared)
@@ -148,8 +156,14 @@ All responses are JSON unless noted.
 - `GET /api/courses/{cid}/quizzes` → list with `kind` and `is_open`. `PATCH /api/quizzes/{qid}` `{is_open}`
 - `GET /api/courses/{cid}/insights` → `{topics:[{topic_id, lecture_title, name, error_rate, n_answers, n_questions, n_flagged, struggle_score}], flagged_questions:[...], recent_questions:[...]}`
 
+**People (showcase addition)**
+- `GET /api/users?role=` → `[{id, name, role, course_ids}]` · `GET /api/users/{uid}`
+- `POST /api/users` `{name | names:[...], role, course_ids?, new_courses?}` · `PATCH /api/users/{uid}` `{name?, course_ids?, new_courses?}` · `DELETE /api/users/{uid}` (`new_courses`: course names to create for a teacher)
+- `POST /api/users/join` `{name, course_id?}` → get-or-create a student (QR joiners)
+- `GET /api/courses?student_id=|teacher_id=` filters; `POST /api/courses` also takes `teacher_id`
+
 **Page routes (Phase 0 registers them, owners build them)**
-`/` → course list · `/course/{cid}` · `/lecture/{lid}` · `/quiz/{qid}` · `/selfeval/{cid}` · `/lecturer`
+`/` → course list · `/course/{cid}` · `/lecture/{lid}` · `/quiz/{qid}` · `/selfeval/{cid}` · `/lecturer` · `/people`
 
 ---
 
@@ -301,3 +315,17 @@ _(Each session appends: phase, what was done, anything that differs from the con
 **Page:** `/lecturer#class|#quizzes|#insights` opens a tab directly. The selected course is kept in `localStorage`. Insights refresh every 8 s while the tab is visible. Bars are coloured by class day (fixed categorical palette, class N → slot N) with a legend, tooltips with the breakdown, and a "Table view" toggle. Quiz rows link to `/quiz/{id}?present=1` (QR + live results) and `/quiz/{id}`.
 
 **Known issues:** the misconception summary in mock mode is a template; check its quality with the real model in Phase 4. Uploads run ingest in a FastAPI background task in the same process, so a slow real-LLM ingest blocks nothing but is lost if the server restarts (use Retry). There is no auth on lecturer routes (prototype).
+
+### Showcase: multi-user — done (2026-11-14)
+**Built:** real students and teachers instead of free-text names. `users` + `enrollments` tables and `courses.teacher_id` (`app/db.py`, added by `init_db()` with `ALTER TABLE` on old DBs), `app/routes_users.py`, the `/people` page (`static/people.html`, inline script), and a user switcher in the shared nav (`static/common.js`). Tested with the TestClient, curl and in the browser (desktop + 375 px).
+
+**How it works:**
+- `static/common.js`: `getCurrentUser()` / `setCurrentUser(u)` hold `{id, name, role}` per tab in `sessionStorage` (new tabs default to the last pick in `localStorage`), so two tabs can be two different people. The nav switcher is the **only** way to change who you act as (/people is setup only, reached from the switcher's "Manage people"). `getStudentName()` keeps its signature and returns the current user's name; with nobody picked it opens `showUserPicker()` (searchable, this course's students first, plus "New student? Join" → `POST /api/users/join`, so QR joiners still work). The old free-text name dialog is gone (`showNameDialog()` now opens the picker).
+- Nav: students get no view tabs (logo = home); teachers get Dashboard · Student view. The user chip opens the switcher. Picking a teacher goes to `/lecturer`; picking a student on `/lecturer` goes to `/`.
+- Scoping (frontend only, no auth): `/` lists the student's enrolled courses (a teacher sees their own); `/lecturer` lists only the teacher's courses, "New course" uses the current teacher (no free-text lecturer field), and a non-teacher gets a "pick a teacher" card.
+- /people: add students (one per line) or a teacher; a teacher can be given existing courses (ticking one moves it to them) and/or **new courses** typed one per line, also from a teacher's Edit form.
+- Names are unique and are still the key in `student_name` columns: renaming a student on /people updates attempts / chat_messages / notes; renaming a teacher updates `courses.lecturer_name`. Deleting a user keeps their history (insights unchanged).
+- `backfill_users()` runs at startup (idempotent): old DBs get a teacher per `lecturer_name` and a student user per `student_name` found in the history, enrolled in that course.
+- Seeds: `seed_course.py` creates the `--lecturer` as a teacher user; `seed_fake_activity.py` creates every fake student as an enrolled user, so you can switch into any of them and see their chats, notes and attempts.
+
+**Known issues:** no auth, anyone can act as anyone (by design for the showcase). Courses can't be deleted from the UI. A teacher previewing a class day chats under their own name, which counts as one more "student" in the insights totals.

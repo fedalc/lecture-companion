@@ -7,7 +7,8 @@
 What it creates (no LLM calls, questions are copied from each lecture's question bank):
 - one homework quiz per class day (only the newest one stays open) and a closed live quiz for class 1,
 - quiz attempts and answers for most students, plus self-evaluation attempts for about half of them,
-- tutor chat questions (user + assistant rows), some flagged "not covered" and a few refused.
+- tutor chat questions (user + assistant rows), some flagged "not covered" and a few refused,
+- a student user per fake name, enrolled in the course (switch into any of them on /people).
 Two "hard" topics are skewed (low correct rate, many questions, more flags) so they top the struggle chart.
 By default: the 3rd topic of class day 2 and the 4th topic of the last class day.
 """
@@ -123,6 +124,13 @@ def main():
         n = f"{FIRST[i % len(FIRST)]} {chr(65 + (i * 7) % 26)}."
         names.append(n if n not in names else f"{n}{i}")
     ability = {n: rng.gauss(0, 0.7) for n in names}
+    # real student users enrolled in the course, so you can switch into any of them on /people
+    with connect() as conn:
+        for n in names:
+            conn.execute("INSERT OR IGNORE INTO users (name, role) VALUES (?, 'student')", (n,))
+        conn.execute(f"""INSERT OR IGNORE INTO enrollments (user_id, course_id)
+                        SELECT id, ? FROM users WHERE role='student' AND name IN ({','.join('?' * len(names))})""",
+                     (course["id"], *names))
     # each question has a "popular" wrong option that confused students pick
     popular_wrong = {}
 

@@ -64,14 +64,19 @@
   <script>
     renderNav('student', [{ label: 'Dashboard' }]);
     (async () => {
-      const student = getStudentName();
-      if (student && student !== 'Guest') document.getElementById('greeting').textContent = `Welcome back, ${student}`;
+      // multi-user: only the current person's courses (enrolled student, or a teacher's own courses)
+      const me = getCurrentUser();
+      if (!me) showUserPicker();
+      const student = me ? me.name : 'Guest';
+      if (me) document.getElementById('greeting').textContent = `Welcome back, ${student}`;
       const [dashboard, courses] = await Promise.all([
-        api(`/api/student/dashboard?student_name=${encodeURIComponent(student || 'Guest')}`),
-        api('/api/courses'),
+        api(`/api/student/dashboard?student_name=${encodeURIComponent(student)}`),
+        me ? api(`/api/courses?${me.role === 'teacher' ? 'teacher_id' : 'student_id'}=${me.id}`) : Promise.resolve([]),
       ]);
-      const quizzes = dashboard.tasks.filter(t => t.kind === 'live');
-      const homework = dashboard.tasks.filter(t => t.kind === 'homework');
+      const mine = new Set(courses.map(c => c.id));
+      const tasks = dashboard.tasks.filter(t => mine.has(t.course_id));
+      const quizzes = tasks.filter(t => t.kind === 'live');
+      const homework = tasks.filter(t => t.kind === 'homework');
       const taskCard = t => `<a href="/quiz/${t.id}" class="block rounded-xl border border-stone-200 p-3 hover:border-indigo-300 hover:bg-stone-50 transition">
         <div class="flex items-center gap-2"><div class="min-w-0 flex-1 font-medium text-sm truncate">${escapeHtml(t.title || (t.kind === 'live' ? 'Quiz' : 'Homework'))}</div><span class="text-xs font-medium rounded-full bg-amber-50 text-amber-800 px-2 py-0.5">To do</span></div>
         <div class="mt-1 text-xs text-stone-500">${escapeHtml(t.course_name)}${t.lecture_title ? ' · ' + escapeHtml(t.lecture_title) : ''} · ${t.n_questions} questions</div>
@@ -80,13 +85,15 @@
       document.getElementById('homework').innerHTML = homework.length ? homework.map(taskCard).join('') : '<p class="text-sm text-stone-500 py-2">No homework to do right now.</p>';
       document.getElementById('quiz-count').textContent = quizzes.length;
       document.getElementById('homework-count').textContent = homework.length;
-      document.getElementById('task-count').textContent = `${dashboard.tasks.length} open`;
+      document.getElementById('task-count').textContent = `${tasks.length} open`;
       document.getElementById('course-list').innerHTML = courses.length ? courses.map(c => `
         <a href="/course/${c.id}" class="block rounded-2xl bg-white border border-stone-200 p-5 hover:border-indigo-300 hover:shadow-sm transition">
           <div class="text-lg font-medium">${escapeHtml(c.name)}</div>
           <div class="text-sm text-stone-500 mt-1">${escapeHtml(c.lecturer_name || '')}</div>
           <div class="text-sm text-indigo-600 font-medium mt-4">View class days →</div>
-        </a>`).join('') : '<div class="text-sm text-stone-500">No courses yet.</div>';
+        </a>`).join('') : `<div class="text-sm text-stone-500">${!me ? 'Choose who you are to see your courses.'
+          : me.role === 'teacher' ? 'You don\'t run any course yet. Create one on the <a href="/lecturer" class="text-indigo-600 hover:underline">dashboard</a>.'
+          : 'Not enrolled in any course yet. Use "Manage people" in the user switcher to enroll.'}</div>`;
     })().catch(err => {
       document.getElementById('quizzes').innerHTML = `<p class="text-sm text-rose-600">Could not load tasks: ${escapeHtml(err.message)}</p>`;
       document.getElementById('homework').innerHTML = '<p class="text-sm text-stone-500">Try refreshing the page.</p>';

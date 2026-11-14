@@ -5,8 +5,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import llm, routes_chat, routes_lecturer, routes_quiz
-from app.db import init_db, query, query_one
+from app import llm, routes_chat, routes_lecturer, routes_quiz, routes_users
+from app.db import backfill_users, init_db, query, query_one
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
@@ -17,12 +17,14 @@ app = FastAPI(title="AI Lecture Companion")
 @app.on_event("startup")
 def _startup():
     init_db()
+    backfill_users()
 
 
 # ------------------------------------------------------------------ routers owned by other phases
 app.include_router(routes_chat.router)      # Phase 1
 app.include_router(routes_quiz.router)      # Phase 2
 app.include_router(routes_lecturer.router)  # Phase 3
+app.include_router(routes_users.router)     # multi-user showcase
 
 
 # ------------------------------------------------------------------ shared API (Phase 0)
@@ -33,8 +35,15 @@ def health():
 
 
 @app.get("/api/courses")
-def list_courses():
-    return query("SELECT id, name, lecturer_name FROM courses ORDER BY id")
+def list_courses(student_id: int | None = None, teacher_id: int | None = None):
+    """All courses, or only a student's enrolled courses / a teacher's own courses."""
+    cols = "c.id, c.name, c.lecturer_name, c.teacher_id"
+    if student_id is not None:
+        return query(f"SELECT {cols} FROM courses c JOIN enrollments e ON e.course_id = c.id "
+                     "WHERE e.user_id=? ORDER BY c.id", (student_id,))
+    if teacher_id is not None:
+        return query(f"SELECT {cols} FROM courses c WHERE c.teacher_id=? ORDER BY c.id", (teacher_id,))
+    return query(f"SELECT {cols} FROM courses c ORDER BY c.id")
 
 
 @app.get("/api/student/dashboard")
@@ -63,7 +72,7 @@ def student_dashboard(student_name: str = "Guest"):
 
 @app.get("/api/courses/{cid}")
 def get_course(cid: int):
-    c = query_one("SELECT id, name, lecturer_name FROM courses WHERE id=?", (cid,))
+    c = query_one("SELECT id, name, lecturer_name, teacher_id FROM courses WHERE id=?", (cid,))
     if not c:
         raise HTTPException(404, "Course not found")
     return c
@@ -128,6 +137,11 @@ def page_selfeval(cid: int):
 @app.get("/lecturer")
 def page_lecturer():
     return _page("lecturer.html")
+
+
+@app.get("/people")
+def page_people():
+    return _page("people.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
