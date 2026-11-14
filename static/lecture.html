@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Class day · Lecture Companion</title>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/common.css">
+</head>
+<!-- Phase 1 owns this page. Phase 0 version: working 3-panel layout, lecture + slides, basic chat & highlight-to-ask. -->
+<body class="flex flex-col h-screen overflow-hidden">
+  <div class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2">
+    <!-- LEFT: AI lecture -->
+    <section class="min-h-0 flex flex-col border-r border-stone-200 bg-white">
+      <div class="px-8 pt-6 pb-4 border-b border-stone-100">
+        <div id="meta" class="text-xs uppercase tracking-wide text-stone-400"></div>
+        <h1 id="title" class="text-2xl font-semibold tracking-tight mt-1">Loading…</h1>
+        <div id="topics" class="flex flex-wrap gap-1.5 mt-3"></div>
+      </div>
+      <article id="lecture" class="panel-scroll flex-1 px-8 py-6">
+        <div class="lecture-prose prose prose-stone prose-headings:tracking-tight"></div>
+      </article>
+    </section>
+
+    <!-- RIGHT: slides on top, chat below -->
+    <section class="min-h-0 grid grid-rows-2">
+      <div class="min-h-0 flex flex-col border-b border-stone-200">
+        <div class="h-9 shrink-0 px-4 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-stone-400 bg-stone-50 border-b border-stone-200">
+          Slides <a id="slides-open" target="_blank" class="normal-case font-normal text-indigo-600 hover:underline">open in new tab ↗</a>
+        </div>
+        <iframe id="slides" class="flex-1 w-full bg-stone-100" title="Slides"></iframe>
+      </div>
+      <div class="min-h-0 flex flex-col bg-white">
+        <div class="h-9 shrink-0 px-4 flex items-center text-xs font-semibold uppercase tracking-wide text-stone-400 bg-stone-50 border-b border-stone-200">
+          Ask the tutor <span class="ml-2 normal-case font-normal text-stone-400">answers come only from this class's material</span>
+        </div>
+        <div id="messages" class="panel-scroll flex-1 p-4 space-y-3 text-sm"></div>
+        <div id="quote" class="hidden mx-4 mb-2 text-xs border-l-4 border-indigo-400 bg-indigo-50 px-3 py-2 rounded-r flex gap-2">
+          <span id="quote-text" class="flex-1 line-clamp-3 italic text-stone-600"></span>
+          <button id="quote-clear" class="text-stone-400 hover:text-stone-700">✕</button>
+        </div>
+        <form id="chat-form" class="p-3 pt-0 flex gap-2">
+          <input id="chat-input" autocomplete="off" placeholder="Ask about anything in this lecture…"
+                 class="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <button class="rounded-lg bg-indigo-600 text-white px-4 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">Send</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <!-- highlight popup -->
+  <div id="sel-popup" class="rounded-lg bg-stone-900 text-white text-sm shadow-lg overflow-hidden">
+    <button id="sel-ask" class="px-3 py-1.5 hover:bg-stone-700">Ask about this</button>
+    <button id="sel-note" class="px-3 py-1.5 hover:bg-stone-700 border-l border-stone-700">Add note</button>
+  </div>
+
+  <script src="/static/common.js"></script>
+  <script src="/static/lecture.js"></script>
+</body>
+</html>
