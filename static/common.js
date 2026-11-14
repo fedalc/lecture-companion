@@ -209,6 +209,18 @@ function renderNav(role = 'student', crumbs = []) {
   document.body.prepend(nav);
   nav.querySelector('#who').onclick = showUserPicker;
   refreshCurrentUser();
+  startHeartbeat();
+}
+
+/** Presence for "friends online": ping the server while this tab is open and visible. */
+function startHeartbeat() {
+  const beat = () => {
+    const u = getCurrentUser();
+    if (u && document.visibilityState === 'visible') api(`/api/users/${u.id}/seen`, { method: 'POST' }).catch(() => {});
+  };
+  beat();
+  setInterval(beat, 60000);
+  document.addEventListener('visibilitychange', beat);
 }
 
 /** Friendly placeholder for features another phase still has to build. */
