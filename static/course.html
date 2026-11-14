@@ -23,6 +23,8 @@
           <p class="text-indigo-100 text-sm mt-2">A short test across every class day. You'll see which lectures to review, with links.</p>
           <a id="selfeval" class="mt-4 inline-block bg-white text-indigo-700 font-medium px-4 py-2 rounded-lg hover:bg-indigo-50">Take self-evaluation test</a>
         </div>
+        <h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-stone-400 mb-3">Homework</h2>
+        <div id="homework" class="space-y-2"><div class="text-sm text-stone-400">Loading…</div></div>
       </aside>
     </div>
   </main>
@@ -46,6 +48,17 @@
           </div>
           ${statusBadge(l.status)}
         </a>`).join('') : comingSoon('No class days yet', 'the lecturer uploads material');
+
+      const hw = await api(`/api/courses/${cid}/open-quizzes?student_name=${encodeURIComponent(getStudentName(false) || '')}`).catch(() => []);
+      document.getElementById('homework').innerHTML = hw.length ? hw.map(q => `
+        <a href="/quiz/${q.id}" class="block rounded-xl bg-white border border-stone-200 p-3 hover:border-indigo-300 transition">
+          <div class="flex items-center gap-2">
+            <div class="font-medium text-sm truncate flex-1">${escapeHtml(q.title)}</div>
+            ${q.best ? `<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">${q.best.score}/${q.best.total}</span>`
+                     : `<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">to do</span>`}
+          </div>
+          <div class="text-xs text-stone-500 mt-0.5">${q.n_questions} questions${q.lecture_title ? ' · ' + escapeHtml(q.lecture_title) : ''}</div>
+        </a>`).join('') : '<div class="text-sm text-stone-400">No open homework right now.</div>';
     })();
   </script>
 </body>
