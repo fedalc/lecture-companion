@@ -261,3 +261,24 @@ _(Each session appends: phase, what was done, anything that differs from the con
 **Known issues:** no LLM judge for the guardrail (fuzzy and token matching only), so a heavily reworded homework question can get through. A note's mark only appears when the passage sits inside one text node (a selection across bold text or list items isn't marked, but the note is still saved). Mock bank and homework questions share the template "Which statement best describes X?", so in mock mode pasting that template for another topic is also refused.
 
 **LLM provider (found during Phase 1):** the hackathon key is an **OpenRouter** key (`sk-or-v1-…`) whose staff guardrail allows only 5 models: `anthropic/claude-sonnet-5.5`, `anthropic/claude-haiku-5.5`, `openai/gpt-6.1-terra`, `openai/gpt-6-luna` and `deepseek/deepseek-v4.1-flash`. The key's spending limit is $10. Working `.env`: `LLM_PROVIDER=openai`, `OPENAI_BASE_URL=https://openrouter.ai/api/v1`, `LLM_MODEL=anthropic/claude-sonnet-5.5`, and the key in `OPENAI_API_KEY`. No code change is needed (`llm.py` already reads `OPENAI_BASE_URL`). Any other model returns a 404 "guardrail restrictions" error. When the LLM fails, `POST /chat` now returns a 502 with a short message.
+
+### Phase 2: done (2026-11-14)
+**Built:** quizzes, QR, self-evaluation and the report (`app/routes_quiz.py`), the quiz page (`static/quiz.html/.js`), the self-evaluation page (`static/selfeval.html/.js`) and a homework list on the course home (`static/course.html`). Tested in mock mode with a script and in the browser (desktop and a 375 px phone viewport): create a homework quiz, take it, see results with explanations, QR/projector view with live results, self-evaluation → "Review this lecture" links.
+
+**How it works:**
+- `POST /lectures/{lid}/quizzes` reuses `ingest.generate_questions()` (no new prompts; uses `QUESTIONS_*`). `n` is clamped to 1–15, the lecture must be `ready` (409 otherwise), LLM failure → 502, a quiz with 0 valid questions is deleted → 502. Optional `title` in the body (default `"Homework: <lecture>"` / `"Live quiz: <lecture>"`).
+- `POST /quizzes/{qid}/attempts` scores server-side and writes one `answers` row per question of the quiz; unanswered questions are stored with `chosen_index=NULL, is_correct=0`. Closed quiz (`is_open=0`) → 403.
+- Self-evaluation **copies** 2 random bank questions per `ready` lecture into a new `self_eval` quiz (`lecture_id NULL`, `topic_id` kept), so its answers count in Phase 3's per-topic error rate. No LLM call.
+- The report finds each question's lecture via the quiz's `lecture_id`, else the topic's lecture, else the bank question with the same text. `weak = score/total < 0.6`. `weak_topics` = topics of wrongly answered questions.
+- QR: `qrcode` PNG of `http://<LAN-IP>:<port>/quiz/{qid}` (UDP-socket trick). `PUBLIC_BASE_URL` in `.env` overrides it (e.g. if the LAN IP detection picks the wrong interface).
+
+**Differences from the contract (additions only):**
+- `GET /quizzes/{qid}` also returns `kind, title, is_open, course_id, course_name, lecture_id, lecture_title, join_url`, and per question `topic_id` and `lecture_title` (only for self_eval).
+- `POST /attempts` also returns `attempt_id`, and each result has `chosen_index`.
+- `GET /attempts/{aid}/report` also returns `score, total, kind, quiz_id, course_id, student_name, created_at`, and each lecture has `number`. Works for any attempt, not only self-eval.
+- New: `GET /api/quizzes/{qid}/results` → `{n_attempts, avg_score, questions:[{id, text, n_answers, pct_correct}]}` (anonymous aggregates, used by the projector view).
+- New: `GET /api/courses/{cid}/open-quizzes?student_name=` → open homework quizzes with `n_questions` and the student's `best` score.
+
+**Pages for Phase 3 to link to:** `/quiz/{qid}` (students), **`/quiz/{qid}?present=1`** (fullscreen QR + live results that refresh every 3 s, for the projector), `/selfeval/{cid}?attempt={aid}` (re-open a report). `quiz.js` defines `runQuiz`, `renderReview`, `scoreRing`; it only auto-runs on `/quiz/` paths, so `selfeval.html` loads it as a library.
+
+**Known issues:** in mock mode every question uses the "Which statement best describes X?" template. The shared nav (Phase 0) wraps awkwardly on a phone. Testing left a few quizzes/attempts in `data/app.db` (students "T" and "Giulia"); re-run the seed to clear them. Students can retake a quiz as often as they like (every attempt counts in insights).
