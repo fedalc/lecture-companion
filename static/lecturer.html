@@ -64,8 +64,23 @@
           <b>Live</b>: show the QR code in class and watch the results come in.</p>
         <div id="gen-list" class="mt-3 grid gap-3 sm:grid-cols-2"></div>
       </div>
+      <form id="exam-form" class="rounded-xl bg-white border border-stone-200 p-4">
+        <div class="font-medium">Add an exam</div>
+        <p class="text-sm text-stone-500">Create a student-solvable exam from a class day. Choose whether it is an oral exam, a sample exam, or both.</p>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end">
+          <label class="text-sm">Class day<select name="lecture_id" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 bg-white"></select></label>
+          <label class="text-sm">Exam title<input name="title" class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="e.g. Midterm practice"></label>
+          <label class="text-sm">Questions<select name="n" class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 bg-white"><option>3</option><option selected>5</option><option>8</option><option>10</option></select></label>
+          <button class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">Create exam</button>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <label class="flex items-center gap-2"><input name="is_oral" type="checkbox" class="rounded border-stone-300 text-indigo-600"> Oral exam</label>
+          <label class="flex items-center gap-2"><input name="is_sample" type="checkbox" class="rounded border-stone-300 text-indigo-600"> Sample exam</label>
+        </div>
+        <div id="exam-msg" class="text-sm mt-2"></div>
+      </form>
       <div>
-        <div class="font-medium">Quizzes</div>
+        <div class="font-medium">Quizzes and exams</div>
         <div id="quiz-list" class="mt-3 space-y-2"></div>
       </div>
     </section>

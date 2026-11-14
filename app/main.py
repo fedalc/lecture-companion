@@ -39,16 +39,16 @@ def list_courses():
 
 @app.get("/api/student/dashboard")
 def student_dashboard(student_name: str = "Guest"):
-    """Open live quizzes and homework the named student has not attempted yet."""
+    """Open quizzes, homework and exams the named student has not attempted yet."""
     name = (student_name or "Guest").strip()[:60] or "Guest"
     tasks = query("""
         SELECT qz.id, qz.title, qz.kind, qz.course_id, c.name AS course_name,
-               qz.lecture_id, l.title AS lecture_title, l.number,
+               qz.lecture_id, l.title AS lecture_title, l.number, qz.is_oral, qz.is_sample,
                (SELECT COUNT(*) FROM questions WHERE quiz_id=qz.id) AS n_questions
         FROM quizzes qz
         JOIN courses c ON c.id=qz.course_id
         LEFT JOIN lectures l ON l.id=qz.lecture_id
-        WHERE qz.kind IN ('live', 'homework') AND qz.is_open=1
+        WHERE qz.kind IN ('live', 'homework', 'exam') AND qz.is_open=1
           AND NOT EXISTS (
               SELECT 1 FROM attempts a WHERE a.quiz_id=qz.id AND a.student_name=?
           )

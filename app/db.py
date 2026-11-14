@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS quizzes (
     lecture_id INTEGER REFERENCES lectures(id),
     kind TEXT NOT NULL,              -- homework | live | self_eval | bank
     title TEXT,
+    is_oral INTEGER DEFAULT 0,
+    is_sample INTEGER DEFAULT 0,
     is_open INTEGER DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -116,6 +118,12 @@ def init_db() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
         conn.executescript(SCHEMA)
+        # Keep existing prototype databases compatible with newer quiz types.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(quizzes)").fetchall()}
+        if "is_oral" not in columns:
+            conn.execute("ALTER TABLE quizzes ADD COLUMN is_oral INTEGER DEFAULT 0")
+        if "is_sample" not in columns:
+            conn.execute("ALTER TABLE quizzes ADD COLUMN is_sample INTEGER DEFAULT 0")
 
 
 def query(sql: str, params: tuple = ()) -> list[dict]:
