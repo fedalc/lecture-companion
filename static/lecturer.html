@@ -4,18 +4,32 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lecturer · Lecture Companion</title>
   <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <link rel="stylesheet" href="/static/common.css">
 </head>
-<!-- Phase 3 owns this page. Phase 0 version: tab shell + read-only class list. -->
+<!-- Phase 3 owns this page. -->
 <body class="flex flex-col">
-  <main class="max-w-6xl w-full mx-auto px-6 py-8">
-    <div class="flex items-end justify-between gap-4">
+  <main class="max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+    <div class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Lecturer dashboard</h1>
         <p class="text-stone-500">Upload material, run quizzes, and see where students get stuck.</p>
       </div>
-      <select id="course-select" class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white"></select>
+      <div class="flex items-center gap-2">
+        <select id="course-select" class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white max-w-[16rem]"></select>
+        <button id="new-course-btn" class="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm hover:bg-stone-50">+ New course</button>
+      </div>
     </div>
+
+    <form id="new-course-form" class="hidden mt-4 rounded-xl bg-white border border-stone-200 p-4 flex flex-wrap gap-3 items-end">
+      <label class="text-sm flex-1 min-w-[12rem]">Course name
+        <input name="name" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="e.g. Analysis II"></label>
+      <label class="text-sm flex-1 min-w-[12rem]">Lecturer
+        <input name="lecturer_name" class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="e.g. Prof. Rossi"></label>
+      <button class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700">Create course</button>
+      <button type="button" id="new-course-cancel" class="text-sm text-stone-500 px-2 py-2">Cancel</button>
+    </form>
 
     <div class="mt-6 border-b border-stone-200 flex gap-6 text-sm" id="tabs">
       <button data-tab="class" class="pb-2 border-b-2 border-indigo-600 text-stone-900 font-medium">Class</button>
@@ -23,12 +37,86 @@
       <button data-tab="insights" class="pb-2 border-b-2 border-transparent text-stone-500">Insights</button>
     </div>
 
+    <!-- ============ CLASS ============ -->
     <section data-panel="class" class="mt-6 space-y-4">
-      <div id="upload-slot"></div>
+      <form id="upload-form" class="rounded-xl bg-white border border-stone-200 p-4">
+        <div class="font-medium">Add a class day</div>
+        <p class="text-sm text-stone-500">Upload the slides (PDF). The AI writes the lecture, extracts the topics and builds a question bank.</p>
+        <div class="mt-3 grid gap-3 sm:grid-cols-[1fr_10rem_1fr_auto] items-end">
+          <label class="text-sm">Title
+            <input name="title" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="e.g. Neural networks"></label>
+          <label class="text-sm">Date
+            <input name="date" type="date" class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"></label>
+          <label class="text-sm">Slides (PDF)
+            <input name="file" type="file" accept="application/pdf,.pdf" required class="mt-1 w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:text-sm"></label>
+          <button class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">Upload</button>
+        </div>
+        <div id="upload-msg" class="text-sm mt-2"></div>
+      </form>
       <div id="class-list" class="space-y-3"></div>
     </section>
-    <section data-panel="quizzes" class="mt-6 hidden"></section>
-    <section data-panel="insights" class="mt-6 hidden"></section>
+
+    <!-- ============ QUIZZES ============ -->
+    <section data-panel="quizzes" class="mt-6 hidden space-y-6">
+      <div>
+        <div class="font-medium">Generate a quiz</div>
+        <p class="text-sm text-stone-500"><b>Homework</b>: students take it at home; while it's open the tutor won't give away its answers.
+          <b>Live</b>: show the QR code in class and watch the results come in.</p>
+        <div id="gen-list" class="mt-3 grid gap-3 sm:grid-cols-2"></div>
+      </div>
+      <div>
+        <div class="font-medium">Quizzes</div>
+        <div id="quiz-list" class="mt-3 space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- ============ INSIGHTS ============ -->
+    <section data-panel="insights" class="mt-6 hidden space-y-6">
+      <div id="kpis" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+
+      <div class="rounded-xl bg-white border border-stone-200 p-5">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div class="font-medium">Where students struggle</div>
+            <p class="text-sm text-stone-500">Struggle score = 60% quiz error rate + 30% tutor questions + 10% "not covered" flags (relative to the busiest topic).</p>
+          </div>
+          <div class="flex items-center gap-3 text-xs text-stone-500">
+            <span id="live-dot" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>live</span>
+            <button id="toggle-table" class="rounded-lg border border-stone-300 px-2 py-1 hover:bg-stone-50">Table view</button>
+          </div>
+        </div>
+        <div id="legend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600"></div>
+        <div id="chart-wrap" class="mt-2 relative" style="height: 360px"><canvas id="chart"></canvas></div>
+        <div id="topic-table" class="hidden mt-3 overflow-x-auto"></div>
+      </div>
+
+      <div class="rounded-xl bg-white border border-stone-200 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div class="font-medium">Misconception summary</div>
+            <p class="text-sm text-stone-500">The AI reads the wrong answers and questions for one topic and suggests what to fix next class.</p>
+          </div>
+          <div class="flex gap-2">
+            <select id="mis-topic" class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white max-w-[16rem]"></select>
+            <button id="mis-btn" class="rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">Summarise</button>
+          </div>
+        </div>
+        <div id="mis-out" class="prose prose-sm prose-stone max-w-none mt-3"></div>
+      </div>
+
+      <div class="grid gap-6 lg:grid-cols-2">
+        <div class="rounded-xl bg-white border border-stone-200 p-5">
+          <div class="font-medium">Questions the material didn't answer</div>
+          <p class="text-sm text-stone-500">The tutor flagged these instead of guessing. Consider covering them next class.</p>
+          <ul id="flagged" class="mt-3 divide-y divide-stone-100 max-h-[28rem] overflow-y-auto"></ul>
+        </div>
+        <div class="rounded-xl bg-white border border-stone-200 p-5">
+          <div class="font-medium">Recent student questions</div>
+          <p class="text-sm text-stone-500">Anonymised. What students are asking the tutor right now.</p>
+          <ul id="recent" class="mt-3 divide-y divide-stone-100 max-h-[28rem] overflow-y-auto"></ul>
+        </div>
+      </div>
+    </section>
   </main>
   <script src="/static/common.js"></script>
   <script src="/static/lecturer.js"></script>
