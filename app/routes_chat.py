@@ -66,7 +66,9 @@ def homework_match_score(message: str, question: str) -> float:
     ratio = difflib.SequenceMatcher(None, m, q).ratio() if len(m) >= 0.6 * len(q) else 0.0
     qt = _tokens(question)
     containment = len(qt & _tokens(message)) / len(qt) if len(qt) >= 3 else 0.0
-    return max(ratio, containment)
+    # raw-text similarity is inflated by shared filler ("what is the ... learning"), so it must reach
+    # 0.75 on its own: scaling by 0.8 maps 0.75 onto MATCH_THRESHOLD (0.6)
+    return max(ratio * 0.8, containment)
 
 
 def find_open_homework_question(lid: int, text: str) -> dict | None:
@@ -91,6 +93,15 @@ def _lecture_or_404(lid: int) -> dict:
 
 @router.post("/lectures/{lid}/chat")
 def chat(lid: int, body: ChatIn):
+    try:
+        return _chat(lid, body)
+    except HTTPException:
+        raise
+    except Exception as e:  # LLM/provider failure: clear 502 instead of a 500 traceback (already in agent_logs)
+        raise HTTPException(502, f"The AI provider failed: {type(e).__name__}: {str(e)[:200]}")
+
+
+def _chat(lid: int, body: ChatIn):
     lec = _lecture_or_404(lid)
     message = body.message.strip()
     if not message:
